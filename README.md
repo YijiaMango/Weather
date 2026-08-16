@@ -27,9 +27,6 @@
 - 說明：`台灣縣市／鄉鎮降雨地圖 · 一週預報 · 定位即看`
 - 圖片：`https://yijiamango.github.io/Weather/og.png`
 
-> LINE 會快取舊預覽。重新分享請用：  
-> https://yijiamango.github.io/Weather/?v=3
-
 ## 發布工具（本專案標準流程）
 
 此 repo 即發布來源：`main` → GitHub Pages（根目錄）。
