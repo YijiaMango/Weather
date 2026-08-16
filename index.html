@@ -1460,8 +1460,11 @@
         const x = paddingLeft + hr * slotWidth + (slotWidth - barWidth) / 2;
         const y = 10 + chartH - barH;
         const active = hr === currentHour;
+        const filledBack = String(d.resolution || "").endsWith("~");
         chartCtx.fillStyle = popBarColor(d.pop, active);
+        if (filledBack && !active) chartCtx.globalAlpha = 0.45;
         chartCtx.fillRect(x, y, barWidth, Math.max(0, barH));
+        chartCtx.globalAlpha = 1;
         if (active) {
           chartCtx.strokeStyle = "#f8fafc";
           chartCtx.lineWidth = 1.5;
