@@ -157,13 +157,11 @@
       left: 0;
       top: 0;
       transform-origin: 0 0;
-      opacity: 0;
+      opacity: 0.9;
       image-rendering: auto;
       display: none;
-      /* 保留官方標準回波配色；multiply 消白底不改色相 */
-      mix-blend-mode: multiply;
-      filter: none;
-      transition: opacity 0.12s ease;
+      /* 官方圖＋負片，不再做其他調色／混色 */
+      filter: invert(1);
     }
     canvas#mapCanvas {
       position: relative;
@@ -813,15 +811,12 @@
       initRadarOverlay();
     }
 
-    // —— 即時雷達疊圖（官方標準配色；地理框對齊鄰近 3600）——
-    // O-A0058-006 / 鄰近範圍：118–124E, 20.5–26.5N
+    // —— 官方雷達圖＋負片（單一來源，避免不同步）——
     const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
-    let radarGeo = RADAR_GEO;
     const RADAR_STEPS = 18;
     let radarStep = RADAR_STEPS;
     const radarCache = new Map();
     let radarLatestMs = 0;
-    let radarClearUrl = "";
 
     function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -839,8 +834,7 @@
     }
 
     function radarUrl(stamp) {
-      // 高解析；與鄰近範圍透明圖同一地理框（非大範圍）
-      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_3600_${stamp}.png`;
+      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_1000_${stamp}.png`;
     }
 
     function formatRadarLabel(ms) {
@@ -851,7 +845,6 @@
     function preloadRadarStamp(stamp) {
       if (radarCache.has(stamp)) return radarCache.get(stamp);
       const img = new Image();
-      img.decoding = "async";
       const p = new Promise((resolve) => {
         let done = false;
         const finish = (val) => {
@@ -861,7 +854,7 @@
           radarCache.set(stamp, val);
           resolve(val);
         };
-        const timer = setTimeout(() => finish("fail"), 8000);
+        const timer = setTimeout(() => finish("fail"), 6000);
         img.onload = () => finish(img);
         img.onerror = () => finish("fail");
         img.src = radarUrl(stamp);
@@ -870,26 +863,10 @@
       return p;
     }
 
-    async function loadClearRadarLatest() {
-      try {
-        const pack = await CWA.loadRadar("near_clear");
-        radarClearUrl = pack.rawUrl || pack.imageUrl;
-        if (pack.obsTime) {
-          const t = new Date(pack.obsTime).getTime();
-          if (!Number.isNaN(t)) radarLatestMs = Math.floor(t / 600000) * 600000;
-        }
-        return pack;
-      } catch (err) {
-        console.warn("clear radar failed", err);
-        return null;
-      }
-    }
-
     async function findLatestRadarMs() {
       let t = floorRadarClock();
       for (let i = 0; i < 6; i++) {
-        const stamp = stampFromMs(t);
-        const hit = await preloadRadarStamp(stamp);
+        const hit = await preloadRadarStamp(stampFromMs(t));
         if (hit !== "fail") return t;
         t -= 10 * 60000;
       }
@@ -909,55 +886,19 @@
       const w = mapCanvas.width;
       const h = mapCanvas.height;
       if (!w || !h) return;
-      const g = radarGeo;
-      const tl = project(g.lon0, g.lat1, w, h);
-      const br = project(g.lon1, g.lat0, w, h);
+      const tl = project(RADAR_GEO.lon0, RADAR_GEO.lat1, w, h);
+      const br = project(RADAR_GEO.lon1, RADAR_GEO.lat0, w, h);
       img.style.left = `${tl.x}px`;
       img.style.top = `${tl.y}px`;
       img.style.width = `${br.x - tl.x}px`;
       img.style.height = `${br.y - tl.y}px`;
     }
 
-    function showRadarSrc(src) {
-      const img = document.getElementById("radarOverlayImg");
-      if (!img || !src) return;
-      radarGeo = RADAR_GEO;
-      img.style.display = "block";
-      const reveal = () => {
-        layoutRadarOverlay();
-        img.style.opacity = "1";
-      };
-      if (img.getAttribute("data-radar-src") === src && img.complete && img.naturalWidth) {
-        reveal();
-        return;
-      }
-      img.style.opacity = "0";
-      img.setAttribute("data-radar-src", src);
-      img.onload = reveal;
-      img.onerror = () => { img.style.opacity = "0"; };
-      const pre = new Image();
-      pre.onload = () => {
-        if (img.getAttribute("data-radar-src") !== src) return;
-        img.src = src;
-        if (img.complete && img.naturalWidth) reveal();
-      };
-      pre.onerror = () => { img.style.opacity = "0"; };
-      pre.src = src;
-    }
-
     let radarApplyToken = 0;
     async function applyRadarStep(step) {
+      if (!radarLatestMs) return;
       const token = ++radarApplyToken;
       radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
-
-      // 最新：官方透明底＋原色（標準降雨回波色階）
-      if (radarStep === RADAR_STEPS && radarClearUrl) {
-        const bust = `${radarClearUrl}${radarClearUrl.includes("?") ? "&" : "?"}t=${radarLatestMs || Date.now()}`;
-        showRadarSrc(bust);
-        return;
-      }
-
-      if (!radarLatestMs) return;
       const stamp = stampFromMs(msFromRadarStep(radarStep));
       let asset = radarCache.get(stamp);
       if (asset instanceof Promise) asset = await asset;
@@ -965,12 +906,7 @@
       if (!asset) asset = await preloadRadarStamp(stamp);
       if (token !== radarApplyToken) return;
       if (asset === "fail" || !asset) {
-        for (let s = radarStep + 1; s <= RADAR_STEPS; s++) {
-          if (s === RADAR_STEPS && radarClearUrl) {
-            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`);
-            radarStep = s;
-            return;
-          }
+        for (let s = Math.min(RADAR_STEPS, radarStep + 1); s <= RADAR_STEPS; s++) {
           const alt = stampFromMs(msFromRadarStep(s));
           let a = radarCache.get(alt);
           if (a instanceof Promise) a = await a;
@@ -980,42 +916,37 @@
           if (a && a !== "fail") { asset = a; radarStep = s; break; }
         }
       }
-      if (token !== radarApplyToken) return;
-      if (asset && asset !== "fail") {
-        showRadarSrc(asset.src || radarUrl(stamp));
+      if (token !== radarApplyToken || !asset || asset === "fail") return;
+      const img = document.getElementById("radarOverlayImg");
+      const src = asset.src || radarUrl(stamp);
+      img.style.display = "block";
+      if (img.getAttribute("src") !== src) {
+        img.onload = () => layoutRadarOverlay();
+        img.src = src;
+      } else {
+        layoutRadarOverlay();
       }
     }
 
     async function syncRadarFromSharedSlider() {
+      if (!radarLatestMs) return;
       if (currentDayOffset !== 0) {
         await applyRadarStep(RADAR_STEPS);
         return;
       }
-      if (!radarLatestMs && !radarClearUrl) return;
-      const latest = radarLatestMs || floorRadarClock();
       const now = new Date();
       const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), currentHour, 0, 0).getTime();
       let ms = Math.floor(target / 600000) * 600000;
-      const oldest = latest - RADAR_STEPS * 10 * 60000;
-      if (ms > latest) ms = latest;
+      const oldest = radarLatestMs - RADAR_STEPS * 10 * 60000;
+      if (ms > radarLatestMs) ms = radarLatestMs;
       if (ms < oldest) ms = oldest;
-      const step = Math.round((ms - oldest) / (10 * 60000));
-      await applyRadarStep(step);
+      await applyRadarStep(Math.round((ms - oldest) / (10 * 60000)));
     }
 
     async function initRadarOverlay() {
       try {
-        // 先上透明底最新圖（深色主題），再開歷史白底序列（會反色）
-        await loadClearRadarLatest();
+        radarLatestMs = await findLatestRadarMs();
         await applyRadarStep(RADAR_STEPS);
-        if (!radarLatestMs) radarLatestMs = await findLatestRadarMs();
-        else {
-          // 並行確認時間軸最新點，不阻塞顯示
-          findLatestRadarMs().then((t) => {
-            if (t) radarLatestMs = t;
-            prefetchRadarWindow();
-          });
-        }
         prefetchRadarWindow();
         syncTimeOverlay();
       } catch (err) {
@@ -1023,10 +954,8 @@
       }
       setInterval(async () => {
         try {
-          await loadClearRadarLatest();
           const prev = radarLatestMs;
-          const t = await findLatestRadarMs();
-          if (t) radarLatestMs = t;
+          radarLatestMs = await findLatestRadarMs();
           if (radarLatestMs !== prev) prefetchRadarWindow();
           await syncRadarFromSharedSlider();
           syncTimeOverlay();
