@@ -31,7 +31,7 @@ function pick(html, re) {
     timelineBeforeMap:
       body.indexOf('class="timeline-card"') > -1 &&
       body.indexOf('class="timeline-card"') < body.indexOf('class="main-grid"'),
-    brandPrimary: html.includes("> YijiaMango Weather</div>"),
+    brandPrimary: html.includes(">YijiaMango Weather 台灣降雨小幫手</div>"),
   };
   console.log(JSON.stringify(out, null, 2));
 
