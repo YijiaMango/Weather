@@ -255,6 +255,36 @@
       margin-right: 4px;
     }
     .hint { font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; }
+    .week-strip {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .week-day {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 4px;
+      text-align: center;
+      cursor: pointer;
+      color: var(--text-main);
+      font: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .week-day:hover { border-color: rgba(58, 134, 255, 0.55); }
+    .week-day.active {
+      border-color: var(--accent);
+      background: rgba(58, 134, 255, 0.14);
+    }
+    .week-day .wd { font-size: 0.72rem; color: var(--text-sub); }
+    .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; }
+    .week-day .mm { font-size: 0.78rem; color: #38bdf8; margin-top: 4px; }
+    .week-day .pp { font-size: 0.72rem; color: #34d399; margin-top: 2px; }
+    @media (max-width: 560px) {
+      .week-strip { gap: 4px; }
+      .week-day { padding: 6px 2px; }
+      .week-day .mm, .week-day .pp { font-size: 0.68rem; }
+    }
   </style>
 </head>
 <body>
@@ -331,19 +361,22 @@
     </div>
 
     <div class="timeline-card">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: 600; font-size: 0.95rem;">24 小時逐時降雨與機率預報</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span style="font-weight: 600; font-size: 0.95rem;">未來一週降雨預報</span>
         <div class="chart-legend">
-          <span><span class="dot" style="background:#38bdf8;"></span>降雨量 (mm/h)</span>
-          <span><span class="dot" style="background:#34d399;"></span>降雨機率 (%)</span>
+          <span><span class="dot" style="background:#38bdf8;"></span>降雨量</span>
+          <span><span class="dot" style="background:#34d399;"></span>降雨機率</span>
         </div>
       </div>
+      <div class="week-strip" id="weekStrip"></div>
+      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
       <div class="time-slider-wrapper">
         <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
         <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
         <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
       </div>
       <canvas id="chartCanvas"></canvas>
+      <div class="hint">資料為模型模擬（非中央氣象署正式預報），用於介面演示。</div>
     </div>
   </div>
 
@@ -401,6 +434,7 @@
     let selectedCounty = null; // Feature
     let selectedTown = null;   // Feature
     let currentHour = new Date().getHours();
+    let currentDayOffset = 0; // 0=今天 … 6=第7天
     let isPlaying = false;
     let playInterval = null;
     let hoverName = "";
@@ -424,8 +458,34 @@
     const locateBtn = document.getElementById("locateBtn");
     const timeSlider = document.getElementById("timeSlider");
     const timeOverlay = document.getElementById("timeOverlay");
+    const weekStrip = document.getElementById("weekStrip");
+    const dayChartTitle = document.getElementById("dayChartTitle");
     timeSlider.value = currentHour;
-    timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+
+    const WEEKDAY_SHORT = ["日", "一", "二", "三", "四", "五", "六"];
+
+    function forecastDate(dayOffset) {
+      const d = new Date();
+      d.setHours(12, 0, 0, 0);
+      d.setDate(d.getDate() + dayOffset);
+      return d;
+    }
+
+    function formatDayLabel(dayOffset) {
+      const d = forecastDate(dayOffset);
+      const md = `${d.getMonth() + 1}/${d.getDate()}`;
+      if (dayOffset === 0) return { wd: "今天", md };
+      if (dayOffset === 1) return { wd: "明天", md };
+      return { wd: `週${WEEKDAY_SHORT[d.getDay()]}`, md };
+    }
+
+    function syncTimeOverlay() {
+      const { wd, md } = formatDayLabel(currentDayOffset);
+      const hh = String(currentHour).padStart(2, "0");
+      timeOverlay.textContent = `預報：${wd} ${md} ${hh}:00`;
+      dayChartTitle.textContent = `${wd} ${md} · 逐時降雨與機率`;
+    }
+    syncTimeOverlay();
     const mapCanvas = document.getElementById("mapCanvas");
     const chartCanvas = document.getElementById("chartCanvas");
     const mapCtx = mapCanvas.getContext("2d");
@@ -464,27 +524,30 @@
       return base * eastBoost * mountain;
     }
 
-    function calcRainForSeed(seed, lat, hour) {
-      const afternoonPeak = Math.exp(-Math.pow(hour - 15, 2) / 8) * 14.0;
-      const wave = Math.sin(hour / 3.0 + lat + seed) * 2.2;
-      const amount = Math.max(0, seed * 1.6 + afternoonPeak * (lat < 24.5 ? 1.25 : 0.85) + wave);
-      const pop = Math.min(95, Math.round((amount / 18) * 80 + 12));
+    function calcRainForSeed(seed, lat, hour, day = 0) {
+      // 多日天氣系統：鋒面／對流強度隨 day 變化
+      const synoptic = 1 + 0.35 * Math.sin(day * 0.95 + seed * 2.1);
+      const afternoonPeak = Math.exp(-Math.pow(hour - 15, 2) / 8) * (11 + (day % 4) * 1.2) * synoptic;
+      const wave = Math.sin(hour / 3.0 + lat + seed + day * 1.7) * 2.2;
+      const overnight = Math.exp(-Math.pow(hour - 3, 2) / 10) * (day % 2 === 1 ? 2.8 : 0.6);
+      const amount = Math.max(0, seed * 1.6 * synoptic + afternoonPeak * (lat < 24.5 ? 1.25 : 0.85) + wave + overnight);
+      const pop = Math.min(95, Math.round((amount / 18) * 80 + 10 + day));
       const dbz = Math.min(65, Math.round(amount * 3.2 + 8));
       return { rain: Number(amount.toFixed(1)), pop, dbz };
     }
 
-    function rainForTown(town, hour) {
+    function rainForTown(town, hour, day = currentDayOffset) {
       const p = town.properties;
       const seed = unitRainSeed(p.TOWNCODE || p.TOWNID, town._c.lat);
-      return calcRainForSeed(seed, town._c.lat, hour);
+      return calcRainForSeed(seed, town._c.lat, hour, day);
     }
 
-    function rainForCounty(county, hour) {
+    function rainForCounty(county, hour, day = currentDayOffset) {
       const towns = townsByCounty[county.properties.COUNTYNAME] || [];
       if (!towns.length) return { rain: 0, pop: 0, dbz: 0 };
       let rain = 0, pop = 0, dbz = 0;
       for (const t of towns) {
-        const d = rainForTown(t, hour);
+        const d = rainForTown(t, hour, day);
         rain += d.rain; pop += d.pop; dbz += d.dbz;
       }
       const n = towns.length;
@@ -493,6 +556,54 @@
         pop: Math.round(pop / n),
         dbz: Math.round(dbz / n)
       };
+    }
+
+    function rainForActive(hour, day = currentDayOffset) {
+      if (selectedTown) return rainForTown(selectedTown, hour, day);
+      if (selectedCounty) return rainForCounty(selectedCounty, hour, day);
+      return null;
+    }
+
+    function dailyOutlook(day) {
+      let maxRain = 0, sumPop = 0, peakHour = 0;
+      for (let hr = 0; hr < 24; hr++) {
+        const d = rainForActive(hr, day);
+        if (!d) return { maxRain: 0, avgPop: 0, peakHour: 12 };
+        if (d.rain > maxRain) { maxRain = d.rain; peakHour = hr; }
+        sumPop += d.pop;
+      }
+      return { maxRain, avgPop: Math.round(sumPop / 24), peakHour };
+    }
+
+    function renderWeekStrip() {
+      weekStrip.innerHTML = "";
+      for (let day = 0; day < 7; day++) {
+        const { wd, md } = formatDayLabel(day);
+        const outlook = (selectedCounty || selectedTown)
+          ? dailyOutlook(day)
+          : { maxRain: 0, avgPop: 0 };
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "week-day" + (day === currentDayOffset ? " active" : "");
+        btn.innerHTML =
+          `<div class="wd">${wd}</div>` +
+          `<div class="md">${md}</div>` +
+          `<div class="mm">${(selectedCounty || selectedTown) ? outlook.maxRain.toFixed(1) + " mm" : "—"}</div>` +
+          `<div class="pp">${(selectedCounty || selectedTown) ? outlook.avgPop + "%" : "選取地區"}</div>`;
+        btn.addEventListener("click", () => {
+          currentDayOffset = day;
+          // 切日時對齊該日峰值時段，方便看圖
+          if (selectedCounty || selectedTown) currentHour = dailyOutlook(day).peakHour;
+          else if (day === 0) currentHour = new Date().getHours();
+          else currentHour = 15;
+          timeSlider.value = currentHour;
+          syncTimeOverlay();
+          renderWeekStrip();
+          updateInfoPanel();
+          drawChart();
+        });
+        weekStrip.appendChild(btn);
+      }
     }
 
     function activeTarget() {
@@ -618,6 +729,7 @@
     }
 
     function updateInfoPanel() {
+      renderWeekStrip();
       const target = activeTarget();
       const badge = document.getElementById("alertBadge");
       const convect = document.getElementById("valConvect");
@@ -966,11 +1078,17 @@
       const chartW = w - paddingLeft - 10;
       const chartH = h - paddingBottom - 10;
 
+      if (!selectedCounty && !selectedTown) {
+        chartCtx.fillStyle = "#64748b";
+        chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
+        chartCtx.textAlign = "center";
+        chartCtx.fillText("選取縣市或鄉鎮後顯示一週／逐時預報", w / 2, h / 2);
+        return;
+      }
+
       const hourlyData = [];
       for (let hr = 0; hr < 24; hr++) {
-        if (selectedTown) hourlyData.push(rainForTown(selectedTown, hr));
-        else if (selectedCounty) hourlyData.push(rainForCounty(selectedCounty, hr));
-        else hourlyData.push({ rain: 0, pop: 0, dbz: 0 });
+        hourlyData.push(rainForActive(hr, currentDayOffset) || { rain: 0, pop: 0, dbz: 0 });
       }
 
       const barWidth = (chartW / 24) * 0.65;
@@ -984,14 +1102,6 @@
         chartCtx.moveTo(paddingLeft, y);
         chartCtx.lineTo(w - 10, y);
         chartCtx.stroke();
-      }
-
-      if (!selectedCounty && !selectedTown) {
-        chartCtx.fillStyle = "#64748b";
-        chartCtx.font = "13px sans-serif";
-        chartCtx.textAlign = "center";
-        chartCtx.fillText("選取縣市或鄉鎮後顯示 24 小時預報", w / 2, h / 2);
-        return;
       }
 
       hourlyData.forEach((d, hr) => {
@@ -1298,7 +1408,7 @@
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
-      timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+      syncTimeOverlay();
       updateInfoPanel();
       drawChart();
     });
@@ -1310,11 +1420,14 @@
         playBtn.style.background = "#e11d48";
         playInterval = setInterval(() => {
           currentHour = (currentHour + 1) % 24;
+          if (currentHour === 0) {
+            currentDayOffset = (currentDayOffset + 1) % 7;
+          }
           timeSlider.value = currentHour;
-          timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+          syncTimeOverlay();
           updateInfoPanel();
           drawChart();
-        }, 1200);
+        }, 900);
       } else {
         playBtn.textContent = "▶ 播放預報";
         playBtn.style.background = "var(--accent)";
