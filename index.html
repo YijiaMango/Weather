@@ -381,7 +381,6 @@
         <button id="backBtn" disabled>上一層</button>
         <button id="locateBtn" title="重新定位">📍 我的位置</button>
         <button id="resetBtn">全台總覽</button>
-        <button id="playBtn" class="primary">▶ 播放預報</button>
       </div>
     </div>
 
@@ -400,8 +399,9 @@
       <div class="time-slider-wrapper">
         <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
         <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
-        <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
+        <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
       </div>
+      <div class="hint" style="margin:0;">拖曳拉桿選擇時刻（不自動播放）</div>
       <canvas id="chartCanvas"></canvas>
       <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
     </div>
@@ -573,8 +573,6 @@
     let selectedTown = null;   // Feature
     let currentHour = new Date().getHours();
     let currentDayOffset = 0; // 0=今天 … 6=第7天
-    let isPlaying = false;
-    let playInterval = null;
     let hoverName = "";
     let userPos = null; // { lon, lat, accuracy }
     let locating = false;
@@ -590,7 +588,6 @@
 
     const citySelect = document.getElementById("citySelect");
     const townSelect = document.getElementById("townSelect");
-    const playBtn = document.getElementById("playBtn");
     const resetBtn = document.getElementById("resetBtn");
     const backBtn = document.getElementById("backBtn");
     const locateBtn = document.getElementById("locateBtn");
@@ -621,6 +618,8 @@
       const { wd, md } = formatDayLabel(currentDayOffset);
       const hh = String(currentHour).padStart(2, "0");
       timeOverlay.textContent = `預報：${wd} ${md} ${hh}:00`;
+      const label = document.getElementById("timeSliderLabel");
+      if (label) label.textContent = `${hh}:00`;
       const res = selectedCounty
         ? (CWA.dayOutlookFromPack(
             selectedCounty.properties.COUNTYNAME,
@@ -1823,28 +1822,7 @@
       syncTimeOverlay();
       updateInfoPanel();
       drawChart();
-    });
-
-    playBtn.addEventListener("click", () => {
-      isPlaying = !isPlaying;
-      if (isPlaying) {
-        playBtn.textContent = "❚❚ 暫停";
-        playBtn.style.background = "#e11d48";
-        playInterval = setInterval(() => {
-          currentHour = (currentHour + 1) % 24;
-          if (currentHour === 0) {
-            currentDayOffset = (currentDayOffset + 1) % 7;
-          }
-          timeSlider.value = currentHour;
-          syncTimeOverlay();
-          updateInfoPanel();
-          drawChart();
-        }, 900);
-      } else {
-        playBtn.textContent = "▶ 播放預報";
-        playBtn.style.background = "var(--accent)";
-        clearInterval(playInterval);
-      }
+      drawMap();
     });
 
     function resizeCanvases() {
