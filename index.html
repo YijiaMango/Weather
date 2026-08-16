@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>落雨小幫手 - 台灣鄉鎮降雨雷達</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="./weather-data/tw-topo.js"></script>
   <style>
@@ -828,7 +831,21 @@
         camera.targetSpan = camera.span;
       }
 
+      function drawLabel(text, x, y, opts = {}) {
+        const size = opts.size || 12;
+        const bold = opts.bold ? "bold " : "";
+        mapCtx.font = `${bold}${size}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+        mapCtx.textAlign = "center";
+        mapCtx.textBaseline = "middle";
+        mapCtx.lineWidth = opts.strokeWidth || 3;
+        mapCtx.strokeStyle = opts.stroke || "rgba(8, 13, 26, 0.85)";
+        mapCtx.strokeText(text, x, y);
+        mapCtx.fillStyle = opts.fill || "#f8fafc";
+        mapCtx.fillText(text, x, y);
+      }
+
       if (viewLevel === "county") {
+        // 先畫填色／邊界
         for (const c of countyFC.features) {
           const data = rainForCounty(c, currentHour);
           const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
@@ -838,15 +855,17 @@
           mapCtx.strokeStyle = isSel ? "#f59e0b" : "#64748b";
           mapCtx.lineWidth = isSel ? 2.2 : 1;
           mapCtx.stroke();
-
-          // 縣市名（離島與本島都標）
+        }
+        // 再統一畫縣市名稱（避免被鄰縣填色蓋掉）
+        for (const c of countyFC.features) {
+          const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
           const p = project(c._c.lon, c._c.lat, w, h);
-          if (p.x > -40 && p.x < w + 40 && p.y > -20 && p.y < h + 20) {
-            mapCtx.fillStyle = isSel ? "#fbbf24" : "#e2e8f0";
-            mapCtx.font = `${isSel ? "bold 12px" : "11px"} sans-serif`;
-            mapCtx.textAlign = "center";
-            mapCtx.fillText(c.properties.COUNTYNAME, p.x, p.y);
-          }
+          if (p.x < -60 || p.x > w + 60 || p.y < -30 || p.y > h + 30) continue;
+          drawLabel(c.properties.COUNTYNAME, p.x, p.y, {
+            size: isSel ? 14 : 12,
+            bold: true,
+            fill: isSel ? "#fbbf24" : "#f8fafc"
+          });
         }
       } else if (selectedCounty) {
         // 其他縣市只畫淡底，不細分鄉鎮
@@ -872,6 +891,19 @@
           mapCtx.stroke();
         }
 
+        // 鄰近縣市名稱
+        for (const c of countyFC.features) {
+          if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
+          const p = project(c._c.lon, c._c.lat, w, h);
+          if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+          drawLabel(c.properties.COUNTYNAME, p.x, p.y, {
+            size: 11,
+            bold: true,
+            fill: "#94a3b8"
+          });
+        }
+
+        // 選取縣內鄉鎮名稱
         for (const t of towns) {
           const b = t._bbox;
           const area = (b[2] - b[0]) * (b[3] - b[1]);
@@ -879,10 +911,11 @@
           if (!isSel && area < 0.0025 && towns.length > 15) continue;
           const p = project(t._c.lon, t._c.lat, w, h);
           if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
-          mapCtx.fillStyle = isSel ? "#fbbf24" : "#f1f5f9";
-          mapCtx.font = `${isSel ? "bold 11px" : "10px"} sans-serif`;
-          mapCtx.textAlign = "center";
-          mapCtx.fillText(t.properties.TOWNNAME, p.x, p.y);
+          drawLabel(t.properties.TOWNNAME, p.x, p.y, {
+            size: isSel ? 12 : 10,
+            bold: isSel,
+            fill: isSel ? "#fbbf24" : "#f1f5f9"
+          });
         }
 
         drawGeom(mapCtx, selectedCounty.geometry, w, h);
