@@ -150,22 +150,19 @@
       z-index: 1;
       pointer-events: none;
       overflow: hidden;
+      background: #080d1a; /* 換幀時也不露白 */
     }
     #radarOverlayImg {
       position: absolute;
       left: 0;
       top: 0;
       transform-origin: 0 0;
-      opacity: 0.95;
+      opacity: 0;
       image-rendering: auto;
       display: none;
-      /* 白底官圖 → 深色底（invert + 色相回正） */
-      filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.05);
-    }
-    #radarOverlayImg.radar-clear {
-      /* 官方透明底圖：不需反色 */
-      filter: none;
-      opacity: 0.92;
+      /* 一律深色處理：白底官圖不會閃白 */
+      filter: invert(1) hue-rotate(180deg) brightness(0.88) contrast(1.08);
+      transition: opacity 0.12s ease;
     }
     canvas#mapCanvas {
       position: relative;
@@ -916,14 +913,32 @@
       img.style.height = `${br.y - tl.y}px`;
     }
 
-    function showRadarSrc(src, clearBg) {
+    function showRadarSrc(src) {
       const img = document.getElementById("radarOverlayImg");
       if (!img || !src) return;
-      img.classList.toggle("radar-clear", !!clearBg);
-      if (img.getAttribute("src") !== src) img.src = src;
       img.style.display = "block";
-      if (img.complete && img.naturalWidth) layoutRadarOverlay();
-      else img.onload = () => layoutRadarOverlay();
+      // 先藏起來再換 src，避免白底未濾鏡的一幀
+      const reveal = () => {
+        layoutRadarOverlay();
+        img.style.opacity = "0.92";
+      };
+      if (img.getAttribute("data-radar-src") === src && img.complete && img.naturalWidth) {
+        reveal();
+        return;
+      }
+      img.style.opacity = "0";
+      img.setAttribute("data-radar-src", src);
+      img.onload = reveal;
+      img.onerror = () => { img.style.opacity = "0"; };
+      // 用新 Image 預載完成後再賦值，進一步消掉閃白
+      const pre = new Image();
+      pre.onload = () => {
+        if (img.getAttribute("data-radar-src") !== src) return;
+        img.src = src;
+        if (img.complete && img.naturalWidth) reveal();
+      };
+      pre.onerror = () => { img.style.opacity = "0"; };
+      pre.src = src;
     }
 
     let radarApplyToken = 0;
@@ -931,10 +946,10 @@
       const token = ++radarApplyToken;
       radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
 
-      // 最新幀優先用官方透明底（深色友善、無白底）
+      // 最新幀優先透明底（同樣走深色濾鏡，色彩仍可辨）
       if (radarStep === RADAR_STEPS && radarClearUrl) {
         const bust = `${radarClearUrl}${radarClearUrl.includes("?") ? "&" : "?"}t=${radarLatestMs || Date.now()}`;
-        showRadarSrc(bust, true);
+        showRadarSrc(bust);
         return;
       }
 
@@ -948,7 +963,7 @@
       if (asset === "fail" || !asset) {
         for (let s = radarStep + 1; s <= RADAR_STEPS; s++) {
           if (s === RADAR_STEPS && radarClearUrl) {
-            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`, true);
+            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`);
             radarStep = s;
             return;
           }
@@ -963,7 +978,7 @@
       }
       if (token !== radarApplyToken) return;
       if (asset && asset !== "fail") {
-        showRadarSrc(asset.src || radarUrl(stamp), false);
+        showRadarSrc(asset.src || radarUrl(stamp));
       }
     }
 
