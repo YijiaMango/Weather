@@ -21,7 +21,6 @@
 ## 正式發布網址
 
 **應用：** https://yijiamango.github.io/Weather/  
-**Repo：** https://github.com/YijiaMango/Weather  
 
 分享預覽（LINE／社群）：
 - 標題：`YijiaMango_Weather｜台灣降雨小幫手`

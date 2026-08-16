@@ -39,7 +39,6 @@ if (-not $status) {
 git push origin HEAD
 Write-Host ""
 Write-Host "Published:"
-Write-Host "  Repo : https://github.com/YijiaMango/Weather"
 Write-Host "  App  : https://yijiamango.github.io/Weather/"
 Write-Host "  Share: https://yijiamango.github.io/Weather/?v=$(Get-Date -Format yyyyMMddHHmm)"
 Write-Host ""
