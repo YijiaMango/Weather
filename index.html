@@ -312,6 +312,25 @@
       </div>
     </div>
 
+    <div class="timeline-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span style="font-weight: 600; font-size: 0.95rem;">未來一週降雨預報</span>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:#38bdf8;"></span>降雨量</span>
+          <span><span class="dot" style="background:#34d399;"></span>降雨機率</span>
+        </div>
+      </div>
+      <div class="week-strip" id="weekStrip"></div>
+      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
+      <div class="time-slider-wrapper">
+        <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
+        <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
+        <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
+      </div>
+      <canvas id="chartCanvas"></canvas>
+      <div class="hint">資料為模型模擬（非中央氣象署正式預報），用於介面演示。</div>
+    </div>
+
     <div class="main-grid">
       <div class="canvas-container" id="canvasWrapper">
         <canvas id="mapCanvas"></canvas>
@@ -361,25 +380,6 @@
           <div class="hint" id="levelHint">目前層級：縣市總覽</div>
         </div>
       </div>
-    </div>
-
-    <div class="timeline-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span style="font-weight: 600; font-size: 0.95rem;">未來一週降雨預報</span>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:#38bdf8;"></span>降雨量</span>
-          <span><span class="dot" style="background:#34d399;"></span>降雨機率</span>
-        </div>
-      </div>
-      <div class="week-strip" id="weekStrip"></div>
-      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
-      <div class="time-slider-wrapper">
-        <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
-        <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
-        <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
-      </div>
-      <canvas id="chartCanvas"></canvas>
-      <div class="hint">資料為模型模擬（非中央氣象署正式預報），用於介面演示。</div>
     </div>
   </div>
 
