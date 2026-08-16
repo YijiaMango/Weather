@@ -412,12 +412,7 @@
         <canvas id="mapCanvas"></canvas>
         <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
         <div class="legend">
-          <span id="legendTitle">降雨機率 (%)</span>
-          <div class="legend-bar" id="legendBar"></div>
-          <div class="legend-labels">
-            <span id="legendLo">0</span><span id="legendMid">50</span><span id="legendHi">100</span>
-          </div>
-          <div style="margin-top:6px;display:flex;gap:4px;">
+          <div style="display:flex;gap:4px;">
             <button type="button" id="mapModePop" class="active" style="padding:4px 8px;font-size:0.72rem;">預報</button>
             <button type="button" id="mapModeLive" style="padding:4px 8px;font-size:0.72rem;">即時雨量</button>
           </div>
@@ -723,16 +718,6 @@
       return null;
     }
 
-    function rainColor(pop, selected) {
-      const a = selected ? 0.72 : 0.52;
-      if (pop <= 10) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.38})`;
-      if (pop <= 30) return `rgba(56, 189, 248, ${a})`;
-      if (pop <= 50) return `rgba(34, 197, 94, ${a})`;
-      if (pop <= 70) return `rgba(234, 179, 8, ${a})`;
-      if (pop <= 85) return `rgba(249, 115, 22, ${a})`;
-      return `rgba(239, 68, 68, ${a})`;
-    }
-
     function setDataBanner(msg, isError = false) {
       const el = document.getElementById("dataBanner");
       if (!msg) { el.style.display = "none"; el.textContent = ""; return; }
@@ -941,23 +926,6 @@
     function syncMapModeUi() {
       document.getElementById("mapModePop").classList.toggle("active", mapMode === "pop");
       document.getElementById("mapModeLive").classList.toggle("active", mapMode === "live");
-      document.getElementById("legendTitle").textContent = mapMode === "live" ? "近1小時雨量 (mm)" : "降雨機率 (%)";
-      document.getElementById("legendLo").textContent = mapMode === "live" ? "0" : "0";
-      document.getElementById("legendMid").textContent = mapMode === "live" ? "10" : "50";
-      document.getElementById("legendHi").textContent = mapMode === "live" ? "40+" : "100";
-      document.getElementById("legendBar").style.background = mapMode === "live"
-        ? "linear-gradient(to right, #1e3a5f, #22c55e, #eab308, #f97316, #ef4444)"
-        : "linear-gradient(to right, #1e3a5f, #00ffff, #00ff00, #ffff00, #ff8000, #ff0000, #b000ff)";
-    }
-
-    function liveRainColor(mm, selected) {
-      const a = selected ? 0.72 : 0.52;
-      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.38})`;
-      if (mm <= 2) return `rgba(56, 189, 248, ${a})`;
-      if (mm <= 5) return `rgba(34, 197, 94, ${a})`;
-      if (mm <= 10) return `rgba(234, 179, 8, ${a})`;
-      if (mm <= 20) return `rgba(249, 115, 22, ${a})`;
-      return `rgba(239, 68, 68, ${a})`;
     }
 
     function updateLiveRainPanel() {
@@ -1372,24 +1340,13 @@
       }
 
       if (viewLevel === "county") {
-        // 先畫填色／邊界
         for (const c of countyFC.features) {
           const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
-          let fill;
-          if (mapMode === "live") {
-            const r = CWA.rainForCounty(c.properties.COUNTYNAME);
-            fill = liveRainColor(r ? r.max1h : 0, isSel);
-          } else {
-            fill = rainColor(popForCountyFeature(c, currentHour, currentDayOffset), isSel);
-          }
           drawGeom(mapCtx, c.geometry, w, h);
-          mapCtx.fillStyle = fill;
-          mapCtx.fill("evenodd");
-          mapCtx.strokeStyle = isSel ? "#f59e0b" : "#64748b";
+          mapCtx.strokeStyle = isSel ? "#fbbf24" : "rgba(248, 250, 252, 0.72)";
           mapCtx.lineWidth = isSel ? 2.2 : 1;
           mapCtx.stroke();
         }
-        // 再統一畫縣市名稱（避免被鄰縣填色蓋掉）
         for (const c of countyFC.features) {
           const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
           const p = project(c._c.lon, c._c.lat, w, h);
@@ -1401,36 +1358,23 @@
           });
         }
       } else if (selectedCounty) {
-        // 其他縣市只畫淡底，不細分鄉鎮
         for (const c of countyFC.features) {
           if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
           drawGeom(mapCtx, c.geometry, w, h);
-          mapCtx.fillStyle = "rgba(15, 23, 42, 0.55)";
-          mapCtx.fill("evenodd");
-          mapCtx.strokeStyle = "#334155";
-          mapCtx.lineWidth = 0.6;
+          mapCtx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+          mapCtx.lineWidth = 0.7;
           mapCtx.stroke();
         }
 
         const towns = townsByCounty[selectedCounty.properties.COUNTYNAME] || [];
         for (const t of towns) {
           const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
-          let fill;
-          if (mapMode === "live") {
-            const hit = CWA.nearestRain(t._c.lon, t._c.lat, t.properties.COUNTYNAME, t.properties.TOWNNAME);
-            fill = liveRainColor(hit ? hit.rain.h1 : 0, isSel);
-          } else {
-            fill = rainColor(popForTownFeature(t, currentHour, currentDayOffset), isSel);
-          }
           drawGeom(mapCtx, t.geometry, w, h);
-          mapCtx.fillStyle = fill;
-          mapCtx.fill("evenodd");
-          mapCtx.strokeStyle = isSel ? "#f59e0b" : "rgba(148, 163, 184, 0.75)";
-          mapCtx.lineWidth = isSel ? 2.4 : 0.9;
+          mapCtx.strokeStyle = isSel ? "#fbbf24" : "rgba(248, 250, 252, 0.65)";
+          mapCtx.lineWidth = isSel ? 2.2 : 0.9;
           mapCtx.stroke();
         }
 
-        // 鄰近縣市名稱
         for (const c of countyFC.features) {
           if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
           const p = project(c._c.lon, c._c.lat, w, h);
@@ -1442,7 +1386,6 @@
           });
         }
 
-        // 選取縣內鄉鎮名稱
         for (const t of towns) {
           const b = t._bbox;
           const area = (b[2] - b[0]) * (b[3] - b[1]);
@@ -1458,7 +1401,7 @@
         }
 
         drawGeom(mapCtx, selectedCounty.geometry, w, h);
-        mapCtx.strokeStyle = "#f59e0b";
+        mapCtx.strokeStyle = "#fbbf24";
         mapCtx.lineWidth = 2;
         mapCtx.stroke();
       }
