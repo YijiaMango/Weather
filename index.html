@@ -160,8 +160,9 @@
       opacity: 0;
       image-rendering: auto;
       display: none;
-      /* SVG 著色器：深色夜視雷達風格 */
-      filter: url(#radarNightStyle);
+      /* 保留官方標準回波配色；multiply 消白底不改色相 */
+      mix-blend-mode: multiply;
+      filter: none;
       transition: opacity 0.12s ease;
     }
     canvas#mapCanvas {
@@ -397,38 +398,6 @@
   </style>
 </head>
 <body>
-  <!-- 雷達夜視著色器（SVG filter，不需 WebGL／CORS） -->
-  <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true" focusable="false">
-    <defs>
-      <filter id="radarNightStyle" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
-        <!-- 1) 反相：白底→深色 -->
-        <feColorMatrix type="matrix" values="
-          -1 0 0 0 1
-           0 -1 0 0 1
-           0 0 -1 0 1
-           0 0 0 1 0" result="inv"/>
-        <!-- 2) 色相回正 -->
-        <feColorMatrix in="inv" type="hueRotate" values="180" result="hue"/>
-        <!-- 3) 對比／壓暗背景 -->
-        <feComponentTransfer in="hue" result="contrast">
-          <feFuncR type="linear" slope="1.22" intercept="-0.08"/>
-          <feFuncG type="linear" slope="1.28" intercept="-0.06"/>
-          <feFuncB type="linear" slope="1.18" intercept="-0.1"/>
-          <feFuncA type="linear" slope="1" intercept="0"/>
-        </feComponentTransfer>
-        <!-- 4) 映成青綠色夜視回波 -->
-        <feColorMatrix in="contrast" type="matrix" values="
-          0.15 0.25 0.10 0 0.02
-          0.05 0.90 0.25 0 0.04
-          0.35 0.45 0.95 0 0.08
-          0    0    0    0.95 0" result="tone"/>
-        <!-- 5) 輕微發光 -->
-        <feGaussianBlur in="tone" stdDeviation="0.6" result="blur"/>
-        <feBlend in="tone" in2="blur" mode="screen"/>
-      </filter>
-    </defs>
-  </svg>
-
   <div class="app-container">
     <div class="top-bar">
       <div>
@@ -844,10 +813,10 @@
       initRadarOverlay();
     }
 
-    // —— 即時雷達疊圖（3600 高解析＋SVG 夜視著色）——
-    const RADAR_GEO_NEAR = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
-    const RADAR_GEO_WIDE = { lon0: 115.0, lon1: 126.5, lat0: 17.75, lat1: 29.25 };
-    let radarGeo = RADAR_GEO_NEAR;
+    // —— 即時雷達疊圖（官方標準配色；地理框對齊鄰近 3600）——
+    // O-A0058-006 / 鄰近範圍：118–124E, 20.5–26.5N
+    const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
+    let radarGeo = RADAR_GEO;
     const RADAR_STEPS = 18;
     let radarStep = RADAR_STEPS;
     const radarCache = new Map();
@@ -870,7 +839,7 @@
     }
 
     function radarUrl(stamp) {
-      // 3600×3600 高解析（對齊較大範圍）
+      // 高解析；與鄰近範圍透明圖同一地理框（非大範圍）
       return `https://www.cwa.gov.tw/Data/radar/CV1_TW_3600_${stamp}.png`;
     }
 
@@ -903,7 +872,6 @@
 
     async function loadClearRadarLatest() {
       try {
-        // 鄰近透明 3600：台灣範圍像素密度最高
         const pack = await CWA.loadRadar("near_clear");
         radarClearUrl = pack.rawUrl || pack.imageUrl;
         if (pack.obsTime) {
@@ -950,14 +918,14 @@
       img.style.height = `${br.y - tl.y}px`;
     }
 
-    function showRadarSrc(src, geo) {
+    function showRadarSrc(src) {
       const img = document.getElementById("radarOverlayImg");
       if (!img || !src) return;
-      if (geo) radarGeo = geo;
+      radarGeo = RADAR_GEO;
       img.style.display = "block";
       const reveal = () => {
         layoutRadarOverlay();
-        img.style.opacity = "0.92";
+        img.style.opacity = "1";
       };
       if (img.getAttribute("data-radar-src") === src && img.complete && img.naturalWidth) {
         reveal();
@@ -982,9 +950,10 @@
       const token = ++radarApplyToken;
       radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
 
+      // 最新：官方透明底＋原色（標準降雨回波色階）
       if (radarStep === RADAR_STEPS && radarClearUrl) {
         const bust = `${radarClearUrl}${radarClearUrl.includes("?") ? "&" : "?"}t=${radarLatestMs || Date.now()}`;
-        showRadarSrc(bust, RADAR_GEO_NEAR);
+        showRadarSrc(bust);
         return;
       }
 
@@ -998,7 +967,7 @@
       if (asset === "fail" || !asset) {
         for (let s = radarStep + 1; s <= RADAR_STEPS; s++) {
           if (s === RADAR_STEPS && radarClearUrl) {
-            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`, RADAR_GEO_NEAR);
+            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`);
             radarStep = s;
             return;
           }
@@ -1013,8 +982,7 @@
       }
       if (token !== radarApplyToken) return;
       if (asset && asset !== "fail") {
-        // 歷史 3600 圖對齊大範圍地理框
-        showRadarSrc(asset.src || radarUrl(stamp), RADAR_GEO_WIDE);
+        showRadarSrc(asset.src || radarUrl(stamp));
       }
     }
 
