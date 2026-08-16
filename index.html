@@ -643,17 +643,14 @@
       dayChartTitle.textContent = `${wd} ${md} · ${resLabel}`;
 
       const paint = () => {
-        const radarTxt = (radarLatestMs && currentDayOffset === 0)
-          ? ` · 雷達 ${formatRadarLabel(msFromRadarStep(radarStep))}`
+        const radarTxt = (radarShownMs && currentDayOffset === 0)
+          ? ` · 雷達 ${formatRadarLabel(radarShownMs)}`
           : "";
         timeOverlay.textContent = `預報：${wd} ${md} ${hh}:00${radarTxt}`;
       };
       paint();
-      // 雷達尚未初始化時不要打 sync（避免啟動順序問題）
-      if (radarLatestMs) {
-        const p = syncRadarFromSharedSlider();
-        if (p && typeof p.then === "function") p.then(paint);
-      }
+      const p = syncRadarFromSharedSlider();
+      if (p && typeof p.then === "function") p.then(paint);
     }
     // 延後到雷達／canvas 就緒後再 sync（見 init / resize）
     const mapCanvas = document.getElementById("mapCanvas");
@@ -811,12 +808,11 @@
       initRadarOverlay();
     }
 
-    // —— 官方雷達圖＋負片（單一來源，避免不同步）——
+    // —— 官方雷達圖＋負片：僅「今天」顯示，拉桿對齊當日完整 0–23 時 ——
     const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
-    const RADAR_STEPS = 18;
-    let radarStep = RADAR_STEPS;
     const radarCache = new Map();
     let radarLatestMs = 0;
+    let radarShownMs = 0;
 
     function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -824,13 +820,14 @@
       return Math.floor(ms / 600000) * 600000 - 10 * 60000;
     }
 
+    function todayStartMs(from = Date.now()) {
+      const d = new Date(from);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0).getTime();
+    }
+
     function stampFromMs(ms) {
       const d = new Date(ms);
       return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}`;
-    }
-
-    function msFromRadarStep(step) {
-      return radarLatestMs - (RADAR_STEPS - step) * 10 * 60000;
     }
 
     function radarUrl(stamp) {
@@ -840,6 +837,15 @@
     function formatRadarLabel(ms) {
       const d = new Date(ms);
       return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+
+    function hideRadarOverlay() {
+      radarShownMs = 0;
+      const img = document.getElementById("radarOverlayImg");
+      if (!img) return;
+      img.style.display = "none";
+      img.removeAttribute("src");
+      img.onload = null;
     }
 
     function preloadRadarStamp(stamp) {
@@ -863,6 +869,14 @@
       return p;
     }
 
+    async function resolveRadarAsset(ms) {
+      const stamp = stampFromMs(ms);
+      let asset = radarCache.get(stamp);
+      if (asset instanceof Promise) asset = await asset;
+      if (!asset) asset = await preloadRadarStamp(stamp);
+      return { stamp, asset, ms };
+    }
+
     async function findLatestRadarMs() {
       let t = floorRadarClock();
       for (let i = 0; i < 6; i++) {
@@ -873,10 +887,17 @@
       return floorRadarClock();
     }
 
-    function prefetchRadarWindow() {
+    /** 預抓今天每個整點＋最新附近幾幀（不一次灌滿 144 張） */
+    function prefetchTodayRadar() {
       if (!radarLatestMs) return;
-      for (let step = 0; step <= RADAR_STEPS; step++) {
-        preloadRadarStamp(stampFromMs(msFromRadarStep(step)));
+      const start = todayStartMs();
+      for (let h = 0; h < 24; h++) {
+        const ms = start + h * 3600000;
+        if (ms > radarLatestMs) break;
+        preloadRadarStamp(stampFromMs(ms));
+      }
+      for (let i = 0; i < 6; i++) {
+        preloadRadarStamp(stampFromMs(radarLatestMs - i * 600000));
       }
     }
 
@@ -895,30 +916,35 @@
     }
 
     let radarApplyToken = 0;
-    async function applyRadarStep(step) {
+    async function applyRadarAtMs(wantMs) {
       if (!radarLatestMs) return;
       const token = ++radarApplyToken;
-      radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
-      const stamp = stampFromMs(msFromRadarStep(radarStep));
-      let asset = radarCache.get(stamp);
-      if (asset instanceof Promise) asset = await asset;
-      if (token !== radarApplyToken) return;
-      if (!asset) asset = await preloadRadarStamp(stamp);
-      if (token !== radarApplyToken) return;
-      if (asset === "fail" || !asset) {
-        for (let s = Math.min(RADAR_STEPS, radarStep + 1); s <= RADAR_STEPS; s++) {
-          const alt = stampFromMs(msFromRadarStep(s));
-          let a = radarCache.get(alt);
-          if (a instanceof Promise) a = await a;
+      const start = todayStartMs();
+      let ms = Math.floor(wantMs / 600000) * 600000;
+      if (ms < start) ms = start;
+      if (ms > radarLatestMs) ms = radarLatestMs;
+
+      // 缺幀時：同小時內往後找 → 再往前找（最多 ±50 分）
+      let hit = null;
+      for (const dir of [1, -1]) {
+        for (let i = 0; i <= 5; i++) {
+          const t = ms + dir * i * 600000;
+          if (t < start || t > radarLatestMs) continue;
+          const r = await resolveRadarAsset(t);
           if (token !== radarApplyToken) return;
-          if (!a) a = await preloadRadarStamp(alt);
-          if (token !== radarApplyToken) return;
-          if (a && a !== "fail") { asset = a; radarStep = s; break; }
+          if (r.asset && r.asset !== "fail") { hit = r; break; }
         }
+        if (hit) break;
       }
-      if (token !== radarApplyToken || !asset || asset === "fail") return;
+      if (token !== radarApplyToken) return;
+      if (!hit) {
+        hideRadarOverlay();
+        return;
+      }
+
+      radarShownMs = hit.ms;
       const img = document.getElementById("radarOverlayImg");
-      const src = asset.src || radarUrl(stamp);
+      const src = hit.asset.src || radarUrl(hit.stamp);
       img.style.display = "block";
       if (img.getAttribute("src") !== src) {
         img.onload = () => layoutRadarOverlay();
@@ -929,25 +955,22 @@
     }
 
     async function syncRadarFromSharedSlider() {
-      if (!radarLatestMs) return;
+      // 非今天：官方沒有對應雲圖 → 不顯示
       if (currentDayOffset !== 0) {
-        await applyRadarStep(RADAR_STEPS);
+        hideRadarOverlay();
         return;
       }
+      if (!radarLatestMs) return;
       const now = new Date();
       const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), currentHour, 0, 0).getTime();
-      let ms = Math.floor(target / 600000) * 600000;
-      const oldest = radarLatestMs - RADAR_STEPS * 10 * 60000;
-      if (ms > radarLatestMs) ms = radarLatestMs;
-      if (ms < oldest) ms = oldest;
-      await applyRadarStep(Math.round((ms - oldest) / (10 * 60000)));
+      await applyRadarAtMs(target);
     }
 
     async function initRadarOverlay() {
       try {
         radarLatestMs = await findLatestRadarMs();
-        await applyRadarStep(RADAR_STEPS);
-        prefetchRadarWindow();
+        prefetchTodayRadar();
+        await syncRadarFromSharedSlider();
         syncTimeOverlay();
       } catch (err) {
         console.warn("radar init failed", err);
@@ -956,7 +979,7 @@
         try {
           const prev = radarLatestMs;
           radarLatestMs = await findLatestRadarMs();
-          if (radarLatestMs !== prev) prefetchRadarWindow();
+          if (radarLatestMs !== prev) prefetchTodayRadar();
           await syncRadarFromSharedSlider();
           syncTimeOverlay();
         } catch (_) { /* ignore */ }
