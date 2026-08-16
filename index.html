@@ -167,18 +167,6 @@
       background: transparent;
     }
     canvas#mapCanvas.is-dragging { cursor: grabbing; }
-    .canvas-overlay-time {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 4;
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(4px);
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      border: 1px solid var(--border);
-    }
     .info-panel {
       display: flex;
       flex-direction: column;
@@ -380,7 +368,6 @@
       <div class="canvas-container" id="canvasWrapper">
         <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
         <canvas id="mapCanvas"></canvas>
-        <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
       </div>
 
       <div class="timeline-card">
@@ -543,7 +530,6 @@
     };
 
     const timeSlider = document.getElementById("timeSlider");
-    const timeOverlay = document.getElementById("timeOverlay");
     const weekStrip = document.getElementById("weekStrip");
     timeSlider.value = currentHour;
 
@@ -565,20 +551,10 @@
     }
 
     function syncTimeOverlay() {
-      const { wd, md } = formatDayLabel(currentDayOffset);
       const hh = String(currentHour).padStart(2, "0");
       const label = document.getElementById("timeSliderLabel");
       if (label) label.textContent = `${hh}:00`;
-
-      const paint = () => {
-        const radarTxt = (radarShownMs && currentDayOffset === 0)
-          ? ` · 雷達 ${formatRadarLabel(radarShownMs)}`
-          : "";
-        timeOverlay.textContent = `預報：${wd} ${md} ${hh}:00${radarTxt}`;
-      };
-      paint();
-      const p = syncRadarFromSharedSlider();
-      if (p && typeof p.then === "function") p.then(paint);
+      return syncRadarFromSharedSlider();
     }
     // 延後到雷達／canvas 就緒後再 sync（見 init / resize）
     const mapCanvas = document.getElementById("mapCanvas");
@@ -731,11 +707,6 @@
 
     function radarUrl(stamp) {
       return `https://www.cwa.gov.tw/Data/radar/CV1_TW_1000_${stamp}.png`;
-    }
-
-    function formatRadarLabel(ms) {
-      const d = new Date(ms);
-      return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     }
 
     function hideRadarOverlay() {
