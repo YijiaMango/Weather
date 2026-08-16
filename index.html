@@ -413,11 +413,6 @@
         <select id="citySelect">
           <option value="">選擇縣市</option>
         </select>
-        <select id="townSelect" disabled>
-          <option value="">選擇鄉鎮市區</option>
-        </select>
-        <button id="locateBtn" title="重新定位">📍 我的位置</button>
-        <button id="resetBtn">全台總覽</button>
       </div>
     </div>
 
@@ -590,6 +585,7 @@
     let hoverName = "";
     let userPos = null; // { lon, lat, accuracy }
     let locating = false;
+    let locateFocus = false; // 最近是否以「我的位置」為視圖焦點
 
     const camera = {
       lon: MAINLAND_VIEW.lon,
@@ -601,9 +597,7 @@
     };
 
     const citySelect = document.getElementById("citySelect");
-    const townSelect = document.getElementById("townSelect");
-    const resetBtn = document.getElementById("resetBtn");
-    const locateBtn = document.getElementById("locateBtn");
+    // town 改點地圖；定位／全台改雙擊地圖切換
     const timeSlider = document.getElementById("timeSlider");
     const timeOverlay = document.getElementById("timeOverlay");
     const weekStrip = document.getElementById("weekStrip");
@@ -1116,21 +1110,6 @@
       }
     }
 
-    function updateTownSelect(countyName) {
-      townSelect.innerHTML = '<option value="">選擇鄉鎮市區</option>';
-      if (!countyName) {
-        townSelect.disabled = true;
-        return;
-      }
-      townSelect.disabled = false;
-      for (const t of (townsByCounty[countyName] || [])) {
-        const opt = document.createElement("option");
-        opt.value = t.properties.TOWNCODE;
-        opt.textContent = t.properties.TOWNNAME;
-        townSelect.appendChild(opt);
-      }
-    }
-
     function updateBreadcrumb() {
       const el = document.getElementById("breadcrumb");
       const parts = [];
@@ -1178,12 +1157,12 @@
 
       if (!target) {
         document.getElementById("locName").textContent = "全台總覽";
-        document.getElementById("coordsText").textContent = "點擊縣市進入鄉鎮細分";
+        document.getElementById("coordsText").textContent = "點擊縣市進鄉鎮 · 雙擊地圖切換定位／全台";
         clearMetrics();
         badge.className = "badge badge-none";
         badge.textContent = "請選取";
-        advice.textContent = "已連接中央氣象署。點擊縣市後載入該縣 3 天細預報與一週官方資料。";
-        hint.textContent = "目前層級：縣市總覽";
+        advice.textContent = "已連接中央氣象署。點縣市進鄉鎮；雙擊地圖可切換「我的位置」與「全台總覽」。";
+        hint.textContent = "目前層級：縣市總覽 · 雙擊切換定位";
         return;
       }
 
@@ -1268,12 +1247,11 @@
     }
 
     async function enterCounty(countyFeature, fit = true) {
+      locateFocus = false;
       selectedCounty = countyFeature;
       selectedTown = null;
       viewLevel = "town";
       citySelect.value = countyFeature.properties.COUNTYNAME;
-      updateTownSelect(countyFeature.properties.COUNTYNAME);
-      townSelect.value = "";
       if (fit) fitToBBox(countyFeature._bbox, OFFSHORE.has(countyFeature.properties.COUNTYNAME) ? 1.35 : 1.15);
       updateInfoPanel();
       drawChart();
@@ -1287,8 +1265,6 @@
       selectedCounty = countyFC.features.find(c => c.properties.COUNTYNAME === townFeature.properties.COUNTYNAME) || selectedCounty;
       viewLevel = "town";
       citySelect.value = townFeature.properties.COUNTYNAME;
-      updateTownSelect(townFeature.properties.COUNTYNAME);
-      townSelect.value = townFeature.properties.TOWNCODE;
       if (!keepView) {
         if (fitTown) {
           const b = townFeature._bbox;
@@ -1326,51 +1302,50 @@
       userPos = { lon, lat, accuracy: accuracy || 0 };
       const town = findTownAt(lon, lat);
       if (!town) {
+        locateFocus = false;
         document.getElementById("weatherAdvice").textContent =
           `已取得定位（北緯 ${lat.toFixed(4)}° / 東經 ${lon.toFixed(4)}°），但似乎不在台灣行政區範圍內，維持全台總覽。`;
-        document.getElementById("levelHint").textContent = "定位：台灣境外";
+        document.getElementById("levelHint").textContent = "定位：台灣境外 · 再雙擊可重試";
         return;
       }
+      locateFocus = true;
       selectTown(town, { fitTown: true });
       ensureCountyWeekly(town.properties.COUNTYNAME);
       const acc = accuracy ? ` · 精度約 ${Math.round(accuracy)} m` : "";
       document.getElementById("coordsText").textContent =
         `裝置位置 北緯 ${lat.toFixed(4)}° / 東經 ${lon.toFixed(4)}°${acc}`;
       document.getElementById("levelHint").textContent =
-        `目前層級：依裝置定位 → ${town.properties.COUNTYNAME} ${town.properties.TOWNNAME}`;
+        `目前層級：依裝置定位 → ${town.properties.COUNTYNAME} ${town.properties.TOWNNAME} · 雙擊回全台`;
     }
 
     function locateDevice(isAuto = false) {
       if (!navigator.geolocation) {
         document.getElementById("weatherAdvice").textContent =
-          "此瀏覽器不支援定位。請改用選單或點擊地圖選擇鄉鎮。";
+          "此瀏覽器不支援定位。請改用縣市選單或點擊地圖選擇鄉鎮。";
         return;
       }
       if (locating) return;
       locating = true;
-      locateBtn.disabled = true;
-      locateBtn.textContent = "定位中…";
       if (isAuto) {
         document.getElementById("weatherAdvice").textContent = "正在取得裝置位置…";
         document.getElementById("levelHint").textContent = "定位中";
+      } else {
+        document.getElementById("levelHint").textContent = "定位中…";
       }
 
       navigator.geolocation.getCurrentPosition(
         pos => {
           locating = false;
-          locateBtn.disabled = false;
-          locateBtn.textContent = "📍 我的位置";
           applyUserLocation(pos.coords.longitude, pos.coords.latitude, pos.coords.accuracy);
         },
         err => {
           locating = false;
-          locateBtn.disabled = false;
-          locateBtn.textContent = "📍 我的位置";
+          locateFocus = false;
           const msg = err.code === 1
-            ? "你拒絕了定位權限。可點「我的位置」再試，或手動選縣市／鄉鎮。"
+            ? "你拒絕了定位權限。可雙擊地圖再試，或手動選縣市／點地圖選鄉鎮。"
             : err.code === 2
-              ? "無法取得位置（訊號或裝置問題）。請手動選縣市／鄉鎮。"
-              : "定位逾時。請再試一次或手動選縣市／鄉鎮。";
+              ? "無法取得位置（訊號或裝置問題）。請手動選縣市或點地圖。"
+              : "定位逾時。再雙擊地圖試試，或手動選縣市。";
           document.getElementById("weatherAdvice").textContent = msg;
           document.getElementById("levelHint").textContent = isAuto ? "定位失敗，顯示全台總覽" : "定位失敗";
         },
@@ -1379,16 +1354,26 @@
     }
 
     function resetOverview() {
+      locateFocus = false;
       viewLevel = "county";
       selectedCounty = null;
       selectedTown = null;
       citySelect.value = "";
-      updateTownSelect(null);
       camera.targetLon = MAINLAND_VIEW.lon;
       camera.targetLat = MAINLAND_VIEW.lat;
       camera.targetSpan = MAINLAND_VIEW.span;
       updateInfoPanel();
       drawChart();
+    }
+
+    /** 雙擊地圖：定位 ↔ 全台總覽 */
+    function toggleLocateOverview() {
+      if (locateFocus || selectedCounty || selectedTown) {
+        resetOverview();
+        document.getElementById("weatherAdvice").textContent = "已切回全台總覽。再雙擊地圖可回到我的位置。";
+      } else {
+        locateDevice(false);
+      }
     }
 
     function drawMap() {
@@ -1890,6 +1875,10 @@
       }
     });
 
+    let mapTapTimer = null;
+    let mapLastTapAt = 0;
+    const MAP_DBL_MS = 320;
+
     function endMapPointer(e) {
       if (!activePointers.has(e.pointerId)) return;
       const { x, y } = canvasCoords(e);
@@ -1910,14 +1899,28 @@
         mapInteract.mode = null;
         mapCanvas.classList.remove("is-dragging");
         if (!wasMoved && !wasPinch) {
+          const now = Date.now();
           const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
-          handleMapSelect(geo.lon, geo.lat);
+          if (now - mapLastTapAt <= MAP_DBL_MS) {
+            clearTimeout(mapTapTimer);
+            mapTapTimer = null;
+            mapLastTapAt = 0;
+            toggleLocateOverview();
+          } else {
+            mapLastTapAt = now;
+            clearTimeout(mapTapTimer);
+            mapTapTimer = setTimeout(() => {
+              mapTapTimer = null;
+              handleMapSelect(geo.lon, geo.lat);
+            }, MAP_DBL_MS);
+          }
         }
       }
     }
 
     mapCanvas.addEventListener("pointerup", endMapPointer);
     mapCanvas.addEventListener("pointercancel", endMapPointer);
+    mapCanvas.addEventListener("dblclick", e => e.preventDefault());
 
     // 滾輪縮放（以游標為中心）
     mapCanvas.addEventListener("wheel", e => {
@@ -1938,17 +1941,6 @@
       const found = countyFC.features.find(c => c.properties.COUNTYNAME === name);
       if (found) enterCounty(found, true);
     });
-
-    townSelect.addEventListener("change", e => {
-      const code = e.target.value;
-      if (!code || !selectedCounty) return;
-      const found = (townsByCounty[selectedCounty.properties.COUNTYNAME] || [])
-        .find(t => t.properties.TOWNCODE === code);
-      if (found) selectTown(found);
-    });
-
-    resetBtn.addEventListener("click", resetOverview);
-    locateBtn.addEventListener("click", () => locateDevice(false));
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
