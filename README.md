@@ -1,44 +1,58 @@
 # YijiaMango_Weather｜台灣降雨小幫手
 
-台灣縣市／鄉鎮市區降雨可視化小工具：真實行政區界、鄉鎮級 drill-down、地圖拖曳／雙指縮放與定位。
+台灣縣市／鄉鎮市區降雨地圖：真實行政區界、一週預報、定位與雙指縮放。
 
 | 名稱 | 說明 |
 |------|------|
 | **YijiaMango_Weather** | 專案／產品代號 |
 | **台灣降雨小幫手** | 中文顯示名稱 |
 
-## 🌐 線上體驗
+## 正式發布網址
 
-**[開啟應用 → https://yijiamango.github.io/Weather/](https://yijiamango.github.io/Weather/)**
+**應用：** https://yijiamango.github.io/Weather/  
+**Repo：** https://github.com/YijiaMango/Weather  
 
-> 首次開啟請允許瀏覽器定位權限，即可自動對應到所在鄉鎮。
+分享預覽（LINE／社群）：
+- 標題：`YijiaMango_Weather｜台灣降雨小幫手`
+- 說明：`台灣縣市／鄉鎮降雨地圖 · 一週預報 · 定位即看`
+- 圖片：`https://yijiamango.github.io/Weather/og.png`
+
+> LINE 會快取舊預覽。重新分享請用：  
+> https://yijiamango.github.io/Weather/?v=3
+
+## 發布工具（本專案標準流程）
+
+此 repo 即發布來源：`main` → GitHub Pages（根目錄）。
+
+```powershell
+cd C:\Users\Tt\Desktop\Weather-repo
+.\publish.ps1 -Message "你的更新說明"
+node verify-publish.js
+```
+
+`publish.ps1` 會：
+1. 同步 `Desktop\weather.html` → `index.html`
+2. commit + push `main`
+3. 印出正式網址
+
+`verify-publish.js` 會核對線上 title／OG／版面是否正確。
 
 ## 功能
 
-- 22 縣市真實邊界總覽
-- 點擊縣市後細分至鄉鎮市區（368 區）
-- 未來一週逐日降雨展望 + 選日看 24 小時逐時圖（模擬資料）
-- 地圖自由拖曳、滾輪／雙指縮放
-- 裝置定位自動聚焦
+- 22 縣市真實邊界；點擊後細分鄉鎮市區
+- 未來一週展望 + 當日 24 小時逐時圖（模擬資料）
+- 拖曳、滾輪／雙指縮放、裝置定位
 
 ## 本機開啟
 
-直接開啟 `index.html`，並確保同目錄有 `weather-data/tw-topo.js`。
-
-若定位被 `file://` 擋下，可用本機靜態伺服器：
+開啟 `index.html`（需同目錄 `weather-data/tw-topo.js`）。定位若被 `file://` 擋住：
 
 ```bash
 npx serve .
 ```
 
-然後開啟終端機顯示的網址。
-
 ## 技術
 
-- 純 HTML / Canvas / JavaScript
-- 圖資：[taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)（TopoJSON）
+- HTML / Canvas / JavaScript
+- 圖資：[taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)
 - [`topojson-client`](https://github.com/topojson/topojson-client)（CDN）
-
-## Repo
-
-https://github.com/YijiaMango/Weather
