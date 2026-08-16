@@ -1389,14 +1389,6 @@
       drawChart();
     }
 
-    function goBack() {
-      if (selectedTown) {
-        enterCounty(selectedCounty, true);
-      } else if (selectedCounty) {
-        resetOverview();
-      }
-    }
-
     function drawMap() {
       const w = mapCanvas.width;
       const h = mapCanvas.height;
