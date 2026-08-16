@@ -849,62 +849,34 @@
           }
         }
       } else if (selectedCounty) {
-        const viewBox = (() => {
-          const tl = unproject(0, 0, w, h);
-          const br = unproject(w, h, w, h);
-          return [
-            Math.min(tl.lon, br.lon),
-            Math.min(br.lat, tl.lat),
-            Math.max(tl.lon, br.lon),
-            Math.max(br.lat, tl.lat)
-          ];
-        })();
-        const inView = (b) => !(b[2] < viewBox[0] || b[0] > viewBox[2] || b[3] < viewBox[1] || b[1] > viewBox[3]);
-        const showAllTowns = camera.span < 1.35;
-
-        // 其他縣市底圖
+        // 其他縣市只畫淡底，不細分鄉鎮
         for (const c of countyFC.features) {
           if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
-          if (!inView(c._bbox)) continue;
           drawGeom(mapCtx, c.geometry, w, h);
-          if (showAllTowns) {
-            mapCtx.fillStyle = "rgba(15, 23, 42, 0.25)";
-          } else {
-            mapCtx.fillStyle = "rgba(15, 23, 42, 0.55)";
-          }
+          mapCtx.fillStyle = "rgba(15, 23, 42, 0.55)";
           mapCtx.fill("evenodd");
           mapCtx.strokeStyle = "#334155";
           mapCtx.lineWidth = 0.6;
           mapCtx.stroke();
         }
 
-        // 視野內鄉鎮（縮放夠近時畫全部，否則只畫當前縣市）
-        const townsToDraw = showAllTowns
-          ? townFC.features.filter(t => inView(t._bbox))
-          : (townsByCounty[selectedCounty.properties.COUNTYNAME] || []);
-
-        for (const t of townsToDraw) {
+        const towns = townsByCounty[selectedCounty.properties.COUNTYNAME] || [];
+        for (const t of towns) {
           const data = rainForTown(t, currentHour);
           const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
-          const inFocusCounty = t.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME;
           drawGeom(mapCtx, t.geometry, w, h);
           mapCtx.fillStyle = rainColor(data.rain, isSel);
-          if (!inFocusCounty && !isSel) {
-            // 略淡一點表示非焦點縣
-            mapCtx.globalAlpha = 0.72;
-          }
           mapCtx.fill("evenodd");
-          mapCtx.globalAlpha = 1;
           mapCtx.strokeStyle = isSel ? "#f59e0b" : "rgba(148, 163, 184, 0.75)";
           mapCtx.lineWidth = isSel ? 2.4 : 0.9;
           mapCtx.stroke();
         }
 
-        for (const t of townsToDraw) {
+        for (const t of towns) {
           const b = t._bbox;
           const area = (b[2] - b[0]) * (b[3] - b[1]);
           const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
-          if (!isSel && area < 0.0025 && townsToDraw.length > 20) continue;
+          if (!isSel && area < 0.0025 && towns.length > 15) continue;
           const p = project(t._c.lon, t._c.lat, w, h);
           if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
           mapCtx.fillStyle = isSel ? "#fbbf24" : "#f1f5f9";
@@ -913,7 +885,6 @@
           mapCtx.fillText(t.properties.TOWNNAME, p.x, p.y);
         }
 
-        // 焦點縣市外框
         drawGeom(mapCtx, selectedCounty.geometry, w, h);
         mapCtx.strokeStyle = "#f59e0b";
         mapCtx.lineWidth = 2;
@@ -1026,14 +997,6 @@
     }
 
     function hitTest(lon, lat) {
-      // 縮放夠近：可直接點任何鄉鎮（拖曳到別區後選取）
-      if (viewLevel === "town" && camera.span < 1.35) {
-        for (const t of townFC.features) {
-          const b = t._bbox;
-          if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) continue;
-          if (pointInFeature(lon, lat, t)) return { type: "town", feature: t };
-        }
-      }
       if (viewLevel === "town" && selectedCounty) {
         const towns = townsByCounty[selectedCounty.properties.COUNTYNAME] || [];
         for (const t of towns) {
