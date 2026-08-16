@@ -820,8 +820,8 @@
       const h = mapCanvas.height;
       mapCtx.clearRect(0, 0, w, h);
 
-      // 拖曳時不 lerp，避免跟手感打架
-      if (!mapDrag.active) {
+      // 拖曳／雙指縮放時不 lerp
+      if (!mapInteract.active) {
         camera.lon += (camera.targetLon - camera.lon) * 0.12;
         camera.lat += (camera.targetLat - camera.lat) * 0.12;
         camera.span += (camera.targetSpan - camera.span) * 0.12;
@@ -1048,14 +1048,23 @@
       return null;
     }
 
-    const mapDrag = {
+    const activePointers = new Map(); // pointerId -> { x, y }
+    const mapInteract = {
       active: false,
       moved: false,
-      pointerId: null,
+      mode: null, // "pan" | "pinch"
+      // pan
       startX: 0,
       startY: 0,
       originLon: 0,
-      originLat: 0
+      originLat: 0,
+      // pinch
+      startDist: 0,
+      startSpan: 0,
+      startMidX: 0,
+      startMidY: 0,
+      originLonPinch: 0,
+      originLatPinch: 0
     };
 
     function canvasCoords(e) {
@@ -1066,16 +1075,102 @@
       };
     }
 
-    function panByPixels(dx, dy) {
+    function pointerList() {
+      return [...activePointers.values()];
+    }
+
+    function pinchDist(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function pinchMid(a, b) {
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+
+    function zoomAt(x, y, nextSpan) {
+      const before = unproject(x, y, mapCanvas.width, mapCanvas.height);
+      camera.span = nextSpan;
+      camera.targetSpan = nextSpan;
+      const after = unproject(x, y, mapCanvas.width, mapCanvas.height);
+      camera.lon += before.lon - after.lon;
+      camera.lat += before.lat - after.lat;
+      camera.targetLon = camera.lon;
+      camera.targetLat = camera.lat;
+    }
+
+    function clampSpan(s) {
+      return Math.min(5.5, Math.max(0.04, s));
+    }
+
+    function beginPanFromPointers() {
+      const pts = pointerList();
+      if (pts.length !== 1) return;
+      const p = pts[0];
+      mapInteract.mode = "pan";
+      mapInteract.startX = p.x;
+      mapInteract.startY = p.y;
+      mapInteract.originLon = camera.lon;
+      mapInteract.originLat = camera.lat;
+    }
+
+    function beginPinchFromPointers() {
+      const pts = pointerList();
+      if (pts.length < 2) return;
+      const [a, b] = pts;
+      const mid = pinchMid(a, b);
+      mapInteract.mode = "pinch";
+      mapInteract.moved = true; // 雙指不觸發點選
+      mapInteract.startDist = Math.max(1, pinchDist(a, b));
+      mapInteract.startSpan = camera.span;
+      mapInteract.startMidX = mid.x;
+      mapInteract.startMidY = mid.y;
+      mapInteract.originLonPinch = camera.lon;
+      mapInteract.originLatPinch = camera.lat;
+    }
+
+    function applyPan() {
+      const pts = pointerList();
+      if (pts.length !== 1) return;
+      const p = pts[0];
+      const dx = p.x - mapInteract.startX;
+      const dy = p.y - mapInteract.startY;
+      if (!mapInteract.moved && Math.hypot(dx, dy) > 5) mapInteract.moved = true;
+      if (!mapInteract.moved) return;
       const w = mapCanvas.width;
       const h = mapCanvas.height;
       const span = camera.span;
-      const dLon = -(dx / (w * 0.9)) * span;
-      const dLat = (dy / (h * 0.9)) * span;
-      camera.lon = mapDrag.originLon + dLon;
-      camera.lat = mapDrag.originLat + dLat;
+      camera.lon = mapInteract.originLon - (dx / (w * 0.9)) * span;
+      camera.lat = mapInteract.originLat + (dy / (h * 0.9)) * span;
       camera.targetLon = camera.lon;
       camera.targetLat = camera.lat;
+      hoverName = "";
+    }
+
+    function applyPinch() {
+      const pts = pointerList();
+      if (pts.length < 2) return;
+      const [a, b] = pts;
+      const mid = pinchMid(a, b);
+      const dist = Math.max(1, pinchDist(a, b));
+      const scale = dist / mapInteract.startDist;
+      const nextSpan = clampSpan(mapInteract.startSpan / scale);
+
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      const span0 = mapInteract.startSpan;
+      const lon0 = mapInteract.originLonPinch;
+      const lat0 = mapInteract.originLatPinch;
+      // 雙指起始中心對應的經緯，縮放後仍對齊目前中心
+      const anchorLon = lon0 + ((mapInteract.startMidX - w / 2) / (w * 0.9)) * span0;
+      const anchorLat = lat0 - ((mapInteract.startMidY - h / 2) / (h * 0.9)) * span0;
+
+      camera.span = nextSpan;
+      camera.targetSpan = nextSpan;
+      camera.lon = anchorLon - ((mid.x - w / 2) / (w * 0.9)) * nextSpan;
+      camera.lat = anchorLat + ((mid.y - h / 2) / (h * 0.9)) * nextSpan;
+      camera.targetLon = camera.lon;
+      camera.targetLat = camera.lat;
+      hoverName = "";
     }
 
     function handleMapSelect(lon, lat) {
@@ -1087,61 +1182,81 @@
           enterCounty(hit.feature, true);
         }
       } else if (hit.type === "town") {
-        // 拖曳探索時點選：不強制重設視角
         selectTown(hit.feature, { keepView: true });
       }
     }
 
     mapCanvas.addEventListener("pointerdown", e => {
       if (e.button !== 0 && e.pointerType === "mouse") return;
+      e.preventDefault();
       const { x, y } = canvasCoords(e);
-      mapDrag.active = true;
-      mapDrag.moved = false;
-      mapDrag.pointerId = e.pointerId;
-      mapDrag.startX = x;
-      mapDrag.startY = y;
-      mapDrag.originLon = camera.lon;
-      mapDrag.originLat = camera.lat;
-      mapCanvas.setPointerCapture(e.pointerId);
+      activePointers.set(e.pointerId, { x, y });
+      mapInteract.active = true;
       mapCanvas.classList.add("is-dragging");
+
+      // 滑鼠才 capture；觸控不 capture，否則第二指無法 pinch
+      if (e.pointerType === "mouse") {
+        try { mapCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+
+      if (activePointers.size >= 2) {
+        beginPinchFromPointers();
+      } else {
+        mapInteract.moved = false;
+        beginPanFromPointers();
+      }
     });
 
     mapCanvas.addEventListener("pointermove", e => {
-      const { x, y } = canvasCoords(e);
-
-      if (mapDrag.active && e.pointerId === mapDrag.pointerId) {
-        const dx = x - mapDrag.startX;
-        const dy = y - mapDrag.startY;
-        if (!mapDrag.moved && Math.hypot(dx, dy) > 5) mapDrag.moved = true;
-        if (mapDrag.moved) {
-          panByPixels(dx, dy);
-          hoverName = "";
+      if (!activePointers.has(e.pointerId) && !mapInteract.active) {
+        const { x, y } = canvasCoords(e);
+        const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
+        const hit = hitTest(geo.lon, geo.lat);
+        if (!hit) { hoverName = ""; return; }
+        if (hit.type === "town") {
+          hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · ${rainForTown(hit.feature, currentHour).rain} mm/h`;
+        } else {
+          hoverName = `${hit.feature.properties.COUNTYNAME} · 均 ${rainForCounty(hit.feature, currentHour).rain} mm/h`;
         }
         return;
       }
 
-      const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
-      const hit = hitTest(geo.lon, geo.lat);
-      if (!hit) { hoverName = ""; return; }
-      if (hit.type === "town") {
-        hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · ${rainForTown(hit.feature, currentHour).rain} mm/h`;
-      } else {
-        hoverName = `${hit.feature.properties.COUNTYNAME} · 均 ${rainForCounty(hit.feature, currentHour).rain} mm/h`;
+      if (!activePointers.has(e.pointerId)) return;
+      e.preventDefault();
+      const { x, y } = canvasCoords(e);
+      activePointers.set(e.pointerId, { x, y });
+
+      if (activePointers.size >= 2) {
+        if (mapInteract.mode !== "pinch") beginPinchFromPointers();
+        applyPinch();
+      } else if (mapInteract.mode === "pan") {
+        applyPan();
       }
     });
 
     function endMapPointer(e) {
-      if (!mapDrag.active || e.pointerId !== mapDrag.pointerId) return;
-      const wasDrag = mapDrag.moved;
+      if (!activePointers.has(e.pointerId)) return;
       const { x, y } = canvasCoords(e);
-      mapDrag.active = false;
-      mapDrag.pointerId = null;
-      mapCanvas.classList.remove("is-dragging");
-      try { mapCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      const wasMoved = mapInteract.moved;
+      const wasPinch = mapInteract.mode === "pinch";
+      activePointers.delete(e.pointerId);
+      if (e.pointerType === "mouse") {
+        try { mapCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
 
-      if (!wasDrag) {
-        const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
-        handleMapSelect(geo.lon, geo.lat);
+      if (activePointers.size >= 2) {
+        beginPinchFromPointers();
+      } else if (activePointers.size === 1) {
+        mapInteract.moved = true;
+        beginPanFromPointers();
+      } else {
+        mapInteract.active = false;
+        mapInteract.mode = null;
+        mapCanvas.classList.remove("is-dragging");
+        if (!wasMoved && !wasPinch) {
+          const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
+          handleMapSelect(geo.lon, geo.lat);
+        }
       }
     }
 
@@ -1152,17 +1267,14 @@
     mapCanvas.addEventListener("wheel", e => {
       e.preventDefault();
       const { x, y } = canvasCoords(e);
-      const before = unproject(x, y, mapCanvas.width, mapCanvas.height);
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
-      const next = Math.min(5.5, Math.max(0.04, camera.span * factor));
-      camera.span = next;
-      camera.targetSpan = next;
-      const after = unproject(x, y, mapCanvas.width, mapCanvas.height);
-      camera.lon += before.lon - after.lon;
-      camera.lat += before.lat - after.lat;
-      camera.targetLon = camera.lon;
-      camera.targetLat = camera.lat;
+      zoomAt(x, y, clampSpan(camera.span * factor));
     }, { passive: false });
+
+    // 阻檔 iOS Safari 地圖區雙指縮放整頁
+    mapCanvas.addEventListener("gesturestart", e => e.preventDefault());
+    mapCanvas.addEventListener("gesturechange", e => e.preventDefault());
+    mapCanvas.addEventListener("gestureend", e => e.preventDefault());
 
     citySelect.addEventListener("change", e => {
       const name = e.target.value;
