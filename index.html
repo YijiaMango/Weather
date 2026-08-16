@@ -307,6 +307,56 @@
       .week-day { padding: 6px 2px; }
       .week-day .mm, .week-day .pp { font-size: 0.68rem; }
     }
+    .sat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sat-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .sat-tabs button {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    .sat-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .sat-frame {
+      position: relative;
+      background: #080d1a;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      min-height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sat-frame img {
+      width: 100%;
+      max-height: 520px;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
+    .sat-meta {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      justify-content: space-between;
+    }
   </style>
 </head>
 <body>
@@ -350,6 +400,21 @@
       </div>
       <canvas id="chartCanvas"></canvas>
       <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
+    </div>
+
+    <div class="sat-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span style="font-weight:600;font-size:0.95rem;">衛星雲圖（中央氣象署）</span>
+        <button type="button" id="satRefreshBtn" title="重新整理雲圖">重新整理</button>
+      </div>
+      <div class="sat-tabs" id="satTabs"></div>
+      <div class="sat-frame">
+        <img id="satImage" alt="中央氣象署衛星雲圖" />
+      </div>
+      <div class="sat-meta">
+        <span id="satMetaText">載入衛星雲圖中…</span>
+        <a id="satOfficialLink" href="https://www.cwa.gov.tw/V8/C/W/OBS_Sat.html" target="_blank" rel="noopener" style="color:#38bdf8;">氣象署衛星頁</a>
+      </div>
     </div>
 
     <div class="main-grid">
@@ -697,6 +762,55 @@
         setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
         hint.textContent = "資料來源：中央氣象署 Open Data（載入失敗）";
       }
+      await loadSatelliteImage(currentSatKey);
+    }
+
+    let currentSatKey = "tw_color_hi";
+    let satTimer = null;
+
+    function initSatTabs() {
+      const tabs = document.getElementById("satTabs");
+      tabs.innerHTML = "";
+      Object.entries(CWA.SAT_PRODUCTS).forEach(([key, prod]) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = prod.label;
+        btn.dataset.key = key;
+        if (key === currentSatKey) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          currentSatKey = key;
+          tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.key === key));
+          loadSatelliteImage(key);
+        });
+        tabs.appendChild(btn);
+      });
+    }
+
+    async function loadSatelliteImage(productKey = currentSatKey) {
+      const img = document.getElementById("satImage");
+      const meta = document.getElementById("satMetaText");
+      meta.textContent = "載入衛星雲圖中…";
+      try {
+        const pack = await CWA.loadSatellite(productKey);
+        img.onload = () => {
+          const obs = pack.obsTime
+            ? new Date(pack.obsTime).toLocaleString("zh-TW")
+            : "—";
+          meta.textContent = `${pack.desc} · 觀測 ${obs} · ${pack.dataset}`;
+        };
+        img.onerror = () => {
+          meta.textContent = "雲圖影像載入失敗（圖檔來源暫時不可用）";
+        };
+        img.src = pack.imageUrl;
+        img.alt = pack.desc;
+      } catch (err) {
+        meta.textContent = `雲圖載入失敗：${err.message || err}`;
+      }
+    }
+
+    function startSatAutoRefresh() {
+      if (satTimer) clearInterval(satTimer);
+      satTimer = setInterval(() => loadSatelliteImage(currentSatKey), 10 * 60 * 1000);
     }
 
     async function ensureCountyWeekly(countyName) {
@@ -1619,6 +1733,9 @@
     drawMap();
     document.title = "YijiaMango_Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => locateDevice(true));
+    initSatTabs();
+    document.getElementById("satRefreshBtn").addEventListener("click", () => loadSatelliteImage(currentSatKey));
+    startSatAutoRefresh();
   </script>
 </body>
 </html>

@@ -724,6 +724,50 @@
     };
   }
 
+  const SAT_PRODUCTS = {
+    tw_color: { id: "O-B0028-003", label: "台灣·彩色" },
+    tw_color_hi: { id: "O-C0042-002", label: "台灣·彩色高解析" },
+    tw_enhance: { id: "O-B0030-003", label: "台灣·色調強化" },
+    tw_vis: { id: "O-B0031-003", label: "台灣·可見光" },
+    ea_color: { id: "O-B0028-002", label: "東亞·彩色" },
+    globe_color: { id: "O-B0028-001", label: "全景·彩色" }
+  };
+
+  async function fetchFileApi(datasetId) {
+    const url = new URL(`https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/${datasetId}`);
+    url.searchParams.set("Authorization", getKey());
+    url.searchParams.set("format", "JSON");
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`HTTP_${res.status}`);
+    return res.json();
+  }
+
+  async function loadSatellite(productKey = "tw_color_hi") {
+    const prod = SAT_PRODUCTS[productKey] || SAT_PRODUCTS.tw_color_hi;
+    const json = await fetchFileApi(prod.id);
+    const ds = json.cwaopendata?.dataset || json.dataset || {};
+    const resource = ds.Resource || ds.resource || {};
+    const geo = ds.GeoInfo || ds.geoInfo || {};
+    const obs = ds.ObsTime?.Datetime || ds.ObsTime?.DateTime || "";
+    const imageUrl = resource.ProductURL || resource.productURL || "";
+    if (!imageUrl) throw new Error("NO_SAT_URL");
+    const bust = `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
+    const pack = {
+      key: productKey,
+      dataset: prod.id,
+      label: prod.label,
+      desc: resource.ResourceDesc || resource.resourceDesc || prod.label,
+      obsTime: obs,
+      imageUrl: bust,
+      rawUrl: imageUrl,
+      lonRange: geo.LongitudeRange || "",
+      latRange: geo.LatitudeRange || "",
+      at: new Date().toISOString()
+    };
+    cache.satellite = pack;
+    return pack;
+  }
+
   global.CWA = {
     getKey,
     hasKey: () => true,
@@ -742,10 +786,12 @@
     pickPeriod,
     dayOutlook,
     dayOutlookFromPack,
+    loadSatellite,
     todayKey,
     addDaysKey,
     hourOf,
     COUNTY_WEEKLY,
-    COUNTY_3DAY
+    COUNTY_3DAY,
+    SAT_PRODUCTS
   };
 })(window);
