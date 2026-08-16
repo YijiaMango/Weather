@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YijiaMango_Weather｜台灣降雨小幫手</title>
+  <title>YijiaMango_Weather - 台灣降雨小幫手</title>
+  <meta name="application-name" content="YijiaMango_Weather" />
+  <meta property="og:title" content="YijiaMango_Weather - 台灣降雨小幫手" />
+  <meta name="twitter:title" content="YijiaMango_Weather - 台灣降雨小幫手" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -291,8 +294,8 @@
   <div class="app-container">
     <div class="top-bar">
       <div>
-        <div class="brand-title"><span>🌧️</span> 台灣降雨小幫手</div>
-        <div style="font-size:0.75rem;color:var(--text-sub);margin-top:2px;letter-spacing:0.04em;">YijiaMango_Weather</div>
+        <div class="brand-title"><span>🌧️</span> YijiaMango_Weather</div>
+        <div style="font-size:0.95rem;font-weight:600;color:#38bdf8;margin-top:2px;">台灣降雨小幫手</div>
         <div class="breadcrumb" id="breadcrumb" style="margin-top:6px;"></div>
       </div>
       <div class="controls-group">
@@ -1449,6 +1452,7 @@
     window.addEventListener("resize", resizeCanvases);
     resizeCanvases();
     drawMap();
+    document.title = "YijiaMango_Weather - 台灣降雨小幫手";
     // 預設抓取裝置位置並對應到鄉鎮
     locateDevice(true);
   </script>
