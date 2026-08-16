@@ -1,5 +1,5 @@
 /**
- * YijiaMango_Weather — 中央氣象署 Open Data 客戶端
+ * YijiaMango Weather — 中央氣象署 Open Data 客戶端
  * F-C0032-001 縣市 36h｜F-D0047-* 鄉鎮 3 天細預報＋一週
  */
 (function (global) {

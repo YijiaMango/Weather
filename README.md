@@ -1,10 +1,10 @@
-# YijiaMango_Weather｜台灣降雨小幫手
+# YijiaMango Weather｜台灣降雨小幫手
 
 台灣縣市／鄉鎮市區降雨地圖：真實行政區界、即時雷達疊圖（拉桿同步）、一週預報、定位與雙指縮放。
 
 | 名稱 | 說明 |
 |------|------|
-| **YijiaMango_Weather** | 專案／產品代號 |
+| **YijiaMango Weather** | 專案／產品代號 |
 | **台灣降雨小幫手** | 中文顯示名稱 |
 
 ## 資料來源（官方）
@@ -29,7 +29,7 @@
 **應用：** https://yijiamango.github.io/Weather/  
 
 分享預覽（LINE／社群）：
-- 標題：`YijiaMango_Weather｜台灣降雨小幫手`
+- 標題：`YijiaMango Weather｜台灣降雨小幫手`
 - 說明：`台灣縣市／鄉鎮降雨地圖 · 一週預報 · 定位即看`
 - 圖片：`https://yijiamango.github.io/Weather/og.png`
 

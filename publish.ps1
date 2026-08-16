@@ -1,7 +1,7 @@
-# YijiaMango_Weather publish tool
+# YijiaMango Weather publish tool
 # Usage: .\publish.ps1 [-Message "commit message"]
 param(
-  [string]$Message = "Publish YijiaMango_Weather update."
+  [string]$Message = "Publish YijiaMango Weather update."
 )
 
 $ErrorActionPreference = "Stop"
