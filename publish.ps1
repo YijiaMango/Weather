@@ -6,24 +6,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
-$src = "C:\Users\Tt\Desktop\weather.html"
-Set-Location $repo
+Set-Location -LiteralPath $repo
 
-if (Test-Path $src) {
-  Copy-Item $src (Join-Path $repo "index.html") -Force
-  Write-Host "Synced Desktop\weather.html -> index.html"
-} else {
-  Write-Host "No Desktop\weather.html; publishing current index.html"
-}
-
-if (-not (Test-Path (Join-Path $repo "weather-data\tw-topo.js"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repo "weather-data\tw-topo.js"))) {
   throw "Missing weather-data/tw-topo.js"
 }
-if (-not (Test-Path (Join-Path $repo "og.png"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repo "og.png"))) {
   Write-Warning "og.png missing — LINE preview image may be empty"
 }
 
-git add index.html weather-data og.png README.md 2>$null
+git add index.html cwa.js weather-data og.png README.md verify-publish.js publish.ps1 2>$null
 git add -u
 $status = git status --porcelain
 if (-not $status) {
