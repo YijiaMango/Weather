@@ -296,10 +296,11 @@
     }
     .chart-legend {
       display: flex;
-      gap: 16px;
-      font-size: 0.8rem;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      font-size: 0.78rem;
       color: var(--text-sub);
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
     .dot {
       width: 8px;
@@ -315,6 +316,10 @@
       gap: 6px;
     }
     .week-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
       background: #0f172a;
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -324,16 +329,17 @@
       color: var(--text-main);
       font: inherit;
       transition: border-color 0.15s, background 0.15s;
+      min-height: 0;
     }
     .week-day:hover { border-color: rgba(58, 134, 255, 0.55); }
     .week-day.active {
       border-color: var(--accent);
       background: rgba(58, 134, 255, 0.14);
     }
-    .week-day .wd { font-size: 0.72rem; color: var(--text-sub); }
-    .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; }
-    .week-day .mm { font-size: 0.78rem; color: #38bdf8; margin-top: 4px; }
-    .week-day .pp { font-size: 0.72rem; color: #34d399; margin-top: 2px; }
+    .week-day .wd { font-size: 0.72rem; color: var(--text-sub); line-height: 1.2; }
+    .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; line-height: 1.2; }
+    .week-day .mm { font-size: 0.78rem; color: #38bdf8; margin-top: 4px; line-height: 1.25; }
+    .week-day .pp { font-size: 0.72rem; color: #34d399; margin-top: 2px; line-height: 1.2; }
     @media (max-width: 560px) {
       .week-strip { gap: 4px; }
       .week-day { padding: 6px 2px; }
@@ -437,23 +443,17 @@
       </div>
 
       <div class="timeline-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <span style="font-weight: 600; font-size: 0.95rem;">未來一週官方預報</span>
-          <div class="chart-legend">
-            <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
-            <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-          </div>
-        </div>
-        <div class="week-strip" id="weekStrip"></div>
-        <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
         <div class="time-slider-wrapper">
           <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
           <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
           <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
         </div>
-        <div class="hint" style="margin:0;">同一拉桿同步預報圖表＋地圖雷達疊圖（今日時刻對應近 3 小時雷達幀）</div>
         <canvas id="chartCanvas"></canvas>
-        <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
+        <div class="week-strip" id="weekStrip"></div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+        </div>
       </div>
       </div>
 
@@ -607,7 +607,6 @@
     const timeSlider = document.getElementById("timeSlider");
     const timeOverlay = document.getElementById("timeOverlay");
     const weekStrip = document.getElementById("weekStrip");
-    const dayChartTitle = document.getElementById("dayChartTitle");
     timeSlider.value = currentHour;
 
     const WEEKDAY_SHORT = ["日", "一", "二", "三", "四", "五", "六"];
@@ -632,15 +631,6 @@
       const hh = String(currentHour).padStart(2, "0");
       const label = document.getElementById("timeSliderLabel");
       if (label) label.textContent = `${hh}:00`;
-      const res = selectedCounty
-        ? (CWA.dayOutlookFromPack(
-            selectedCounty.properties.COUNTYNAME,
-            selectedTown?.properties.TOWNNAME,
-            currentDayOffset
-          ).resolution || "—")
-        : "—";
-      const resLabel = res === "3h" ? "近程 3h 降雨機率＋逐時氣溫" : res === "12h" ? "12h 時段預報" : "官方時段";
-      dayChartTitle.textContent = `${wd} ${md} · ${resLabel}`;
 
       const paint = () => {
         const radarTxt = (radarShownMs && currentDayOffset === 0)
@@ -791,19 +781,16 @@
     }
 
     async function bootstrapCwa() {
-      const hint = document.getElementById("dataSourceHint");
       setDataBanner("正在載入中央氣象署官方預報與即時觀測…", false);
       try {
         await Promise.all([CWA.loadCounty36h(), CWA.loadRainStations()]);
         setDataBanner("");
-        hint.textContent = `資料來源：中央氣象署 Open Data · 預報＋雨量站 · 雷達圖幀同步拉桿 · ${new Date().toLocaleString("zh-TW")}`;
         if (selectedCounty) await ensureCountyWeekly(selectedCounty.properties.COUNTYNAME);
         updateInfoPanel();
         drawChart();
         drawMap();
       } catch (err) {
         setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
-        hint.textContent = "資料來源：中央氣象署 Open Data（載入失敗）";
       }
       initRadarOverlay();
     }
@@ -1053,10 +1040,8 @@
     async function ensureCountyWeekly(countyName) {
       setDataBanner(`載入 ${countyName} 官方預報（3天細＋一週）…`, false);
       try {
-        const pack = await CWA.loadCountyForecast(countyName);
+        await CWA.loadCountyForecast(countyName);
         setDataBanner("");
-        document.getElementById("dataSourceHint").textContent =
-          `資料來源：中央氣象署 ${pack.datasets.day3}＋${pack.datasets.week} · ${countyName} · ${new Date(pack.at).toLocaleString("zh-TW")}`;
       } catch (err) {
         setDataBanner(`${countyName} 預報載入失敗：${err.message || err}`, true);
       }
