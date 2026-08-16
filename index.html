@@ -138,18 +138,71 @@
       aspect-ratio: 4 / 5;
       max-height: 560px;
     }
+    #radarOverlayLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    #radarOverlayImg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: 0 0;
+      mix-blend-mode: multiply;
+      opacity: 0.92;
+      image-rendering: auto;
+      display: none;
+    }
     canvas#mapCanvas {
+      position: relative;
+      z-index: 2;
       width: 100%;
       height: 100%;
       display: block;
       cursor: grab;
       touch-action: none;
+      background: #080d1a;
+    }
+    .radar-dock {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 4;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .radar-dock .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .radar-dock label {
+      font-size: 0.78rem;
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+    .radar-dock #radarTimeLabel {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #86efac;
+      min-width: 9.5rem;
+      text-align: right;
     }
     canvas#mapCanvas.is-dragging { cursor: grabbing; }
     .canvas-overlay-time {
       position: absolute;
       top: 12px;
       left: 12px;
+      z-index: 4;
       background: rgba(15, 23, 42, 0.85);
       backdrop-filter: blur(4px);
       padding: 6px 12px;
@@ -159,8 +212,10 @@
     }
     .legend {
       position: absolute;
-      bottom: 12px;
-      left: 12px;
+      top: 48px;
+      right: 12px;
+      bottom: auto;
+      left: auto;
       background: rgba(15, 23, 42, 0.85);
       backdrop-filter: blur(4px);
       padding: 6px 10px;
@@ -170,6 +225,7 @@
       flex-direction: column;
       gap: 4px;
       border: 1px solid var(--border);
+      z-index: 4;
     }
     .legend-bar {
       width: 120px;
@@ -386,56 +442,9 @@
 
     <div id="dataBanner" style="display:none;background:#0f3d2e;border:1px solid #34d399;color:#bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.88rem;line-height:1.45;"></div>
 
-    <div class="timeline-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span style="font-weight: 600; font-size: 0.95rem;">未來一週官方預報</span>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
-          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-        </div>
-      </div>
-      <div class="week-strip" id="weekStrip"></div>
-      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
-      <div class="time-slider-wrapper">
-        <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
-        <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
-        <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
-      </div>
-      <div class="hint" style="margin:0;">拖曳拉桿選擇時刻（不自動播放）</div>
-      <canvas id="chartCanvas"></canvas>
-      <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
-    </div>
-
-    <div class="sat-card" id="liveCard">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span style="font-weight:600;font-size:0.95rem;">即時監測（約每 10 分鐘）</span>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" id="liveModeRadar" class="active">雷達回波</button>
-          <button type="button" id="liveModeSat">衛星雲圖</button>
-          <button type="button" id="satRefreshBtn" title="重新整理">重新整理</button>
-        </div>
-      </div>
-      <div class="hint" style="margin:0;">對齊 NCDR「落雨小幫手」的即時層：雷達／雨量站觀測。下方一週圖仍是鄉鎮預報（3h／12h），兩者用途不同。</div>
-      <div class="sat-tabs" id="satTabs"></div>
-      <div class="metric-grid dense" id="liveRainGrid" style="margin-top:2px;">
-        <div class="metric-box"><div class="metric-label">測站</div><div class="metric-value sm" id="liveStation">—</div></div>
-        <div class="metric-box"><div class="metric-label">觀測時間</div><div class="metric-value sm" id="liveObsTime">—</div></div>
-        <div class="metric-box"><div class="metric-label">近 10 分雨量</div><div class="metric-value" id="liveRain10">—</div></div>
-        <div class="metric-box"><div class="metric-label">近 1 小時</div><div class="metric-value" id="liveRain1h">—</div></div>
-        <div class="metric-box"><div class="metric-label">近 3 小時</div><div class="metric-value" id="liveRain3h">—</div></div>
-        <div class="metric-box"><div class="metric-label">近 24 小時</div><div class="metric-value" id="liveRain24h">—</div></div>
-      </div>
-      <div class="sat-frame">
-        <img id="satImage" alt="中央氣象署即時監測圖" />
-      </div>
-      <div class="sat-meta">
-        <span id="satMetaText">載入即時圖資中…</span>
-        <a id="satOfficialLink" href="https://www.cwa.gov.tw/V8/C/W/OBS_Radar.html" target="_blank" rel="noopener" style="color:#38bdf8;">氣象署雷達頁</a>
-      </div>
-    </div>
-
     <div class="main-grid">
       <div class="canvas-container" id="canvasWrapper">
+        <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
         <canvas id="mapCanvas"></canvas>
         <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
         <div class="legend">
@@ -449,6 +458,18 @@
             <button type="button" id="mapModeLive" style="padding:4px 8px;font-size:0.72rem;">即時雨量</button>
           </div>
         </div>
+        <div class="radar-dock">
+          <div class="row">
+            <label>即時雷達雲氣</label>
+            <span id="radarTimeLabel">載入中…</span>
+          </div>
+          <div class="row">
+            <span style="font-size:0.75rem;color:var(--text-sub);">−3h</span>
+            <input type="range" id="radarSlider" min="0" max="18" value="18" step="1" style="flex:1;" />
+            <span style="font-size:0.75rem;color:var(--text-sub);">現在</span>
+          </div>
+          <div class="hint" style="margin:0;">拖曳拉桿切換過去 3 小時雷達（每 10 分一幀，與地圖同步；無手動重整）</div>
+        </div>
       </div>
 
       <div class="info-panel">
@@ -459,6 +480,14 @@
           </div>
           <div class="location-name" id="locName">全台總覽</div>
           <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 2px;" id="coordsText">點擊縣市進入鄉鎮細分</div>
+          <div class="metric-grid dense" id="liveRainGrid" style="margin-top:10px;">
+            <div class="metric-box"><div class="metric-label">鄰近雨量站</div><div class="metric-value sm" id="liveStation">—</div></div>
+            <div class="metric-box"><div class="metric-label">測站觀測</div><div class="metric-value sm" id="liveObsTime">—</div></div>
+            <div class="metric-box"><div class="metric-label">近 10 分</div><div class="metric-value" id="liveRain10">—</div></div>
+            <div class="metric-box"><div class="metric-label">近 1 小時</div><div class="metric-value" id="liveRain1h">—</div></div>
+            <div class="metric-box"><div class="metric-label">近 3 小時</div><div class="metric-value" id="liveRain3h">—</div></div>
+            <div class="metric-box"><div class="metric-label">近 24 小時</div><div class="metric-value" id="liveRain24h">—</div></div>
+          </div>
           <div class="metric-grid dense" id="metricGrid">
             <div class="metric-box">
               <div class="metric-label">天氣現象</div>
@@ -501,7 +530,7 @@
               <div class="metric-value sm" id="valUvi">—</div>
             </div>
             <div class="metric-box span2">
-              <div class="metric-label">資料解析度</div>
+              <div class="metric-label">預報解析度</div>
               <div class="metric-value sm" id="valRes">—</div>
             </div>
           </div>
@@ -515,6 +544,26 @@
           <div class="hint" id="levelHint">目前層級：縣市總覽</div>
         </div>
       </div>
+    </div>
+
+    <div class="timeline-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span style="font-weight: 600; font-size: 0.95rem;">未來一週官方預報</span>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+        </div>
+      </div>
+      <div class="week-strip" id="weekStrip"></div>
+      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
+      <div class="time-slider-wrapper">
+        <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
+        <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
+        <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
+      </div>
+      <div class="hint" style="margin:0;">拖曳拉桿選擇預報時刻（與上方即時雷達拉桿分開）</div>
+      <canvas id="chartCanvas"></canvas>
+      <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
     </div>
   </div>
 
@@ -749,8 +798,8 @@
     }
 
     function rainColor(pop, selected) {
-      const a = selected ? 0.78 : 0.55;
-      if (pop <= 10) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.35})`;
+      const a = selected ? 0.42 : 0.28;
+      if (pop <= 10) return `rgba(30, 58, 95, ${selected ? 0.4 : 0.22})`;
       if (pop <= 30) return `rgba(56, 189, 248, ${a})`;
       if (pop <= 50) return `rgba(34, 197, 94, ${a})`;
       if (pop <= 70) return `rgba(234, 179, 8, ${a})`;
@@ -774,7 +823,7 @@
       try {
         await Promise.all([CWA.loadCounty36h(), CWA.loadRainStations()]);
         setDataBanner("");
-        hint.textContent = `資料來源：中央氣象署 Open Data · 預報＋即時雨量站 · ${new Date().toLocaleString("zh-TW")}`;
+        hint.textContent = `資料來源：中央氣象署 Open Data · 預報＋雨量站 · 雷達圖幀同步拉桿 · ${new Date().toLocaleString("zh-TW")}`;
         if (selectedCounty) await ensureCountyWeekly(selectedCounty.properties.COUNTYNAME);
         updateInfoPanel();
         drawChart();
@@ -783,79 +832,145 @@
         setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
         hint.textContent = "資料來源：中央氣象署 Open Data（載入失敗）";
       }
-      await refreshLiveImage();
+      initRadarOverlay();
     }
 
-    let liveLayer = "radar"; // radar | sat
-    let currentSatKey = "tw_color_hi";
-    let currentRadarKey = "near";
-    let mapMode = "pop"; // pop | live
-    let satTimer = null;
+    // —— 即時雷達疊圖（與拉桿同步，無手動重整）——
+    // 鄰近區域地理範圍（對齊 O-A0058-003 / CV1_TW_1000）
+    const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
+    const RADAR_STEPS = 18; // 0=−3h … 18=最新
+    let radarStep = RADAR_STEPS;
+    const radarCache = new Map(); // stamp -> HTMLImageElement | 'fail'
+    let radarLatestMs = 0;
 
-    function productMap() {
-      return liveLayer === "radar" ? CWA.RADAR_PRODUCTS : CWA.SAT_PRODUCTS;
-    }
-    function currentProductKey() {
-      return liveLayer === "radar" ? currentRadarKey : currentSatKey;
+    function pad2(n) { return String(n).padStart(2, "0"); }
+
+    function floorRadarClock(ms = Date.now()) {
+      // 對齊 10 分鐘；氣象署通常落後約 10 分
+      return Math.floor(ms / 600000) * 600000 - 10 * 60000;
     }
 
-    function initSatTabs() {
-      const tabs = document.getElementById("satTabs");
-      tabs.innerHTML = "";
-      const products = productMap();
-      const activeKey = currentProductKey();
-      Object.entries(products).forEach(([key, prod]) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = prod.label;
-        btn.dataset.key = key;
-        if (key === activeKey) btn.classList.add("active");
-        btn.addEventListener("click", () => {
-          if (liveLayer === "radar") currentRadarKey = key;
-          else currentSatKey = key;
-          tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.key === key));
-          refreshLiveImage();
-        });
-        tabs.appendChild(btn);
+    function stampFromMs(ms) {
+      const d = new Date(ms);
+      return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+    }
+
+    function msFromRadarStep(step) {
+      return radarLatestMs - (RADAR_STEPS - step) * 10 * 60000;
+    }
+
+    function radarUrl(stamp) {
+      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_1000_${stamp}.png`;
+    }
+
+    function formatRadarLabel(ms) {
+      const d = new Date(ms);
+      return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+
+    function preloadRadarStamp(stamp) {
+      if (radarCache.has(stamp)) return radarCache.get(stamp);
+      const img = new Image();
+      img.decoding = "async";
+      const p = new Promise((resolve) => {
+        img.onload = () => { radarCache.set(stamp, img); resolve(img); };
+        img.onerror = () => { radarCache.set(stamp, "fail"); resolve("fail"); };
+        img.src = radarUrl(stamp);
       });
+      radarCache.set(stamp, p);
+      return p;
     }
 
-    async function refreshLiveImage() {
-      const img = document.getElementById("satImage");
-      const meta = document.getElementById("satMetaText");
-      const link = document.getElementById("satOfficialLink");
-      meta.textContent = liveLayer === "radar" ? "載入雷達回波中…" : "載入衛星雲圖中…";
-      link.href = liveLayer === "radar"
-        ? "https://www.cwa.gov.tw/V8/C/W/OBS_Radar.html"
-        : "https://www.cwa.gov.tw/V8/C/W/OBS_Sat.html";
-      link.textContent = liveLayer === "radar" ? "氣象署雷達頁" : "氣象署衛星頁";
-      try {
-        const pack = liveLayer === "radar"
-          ? await CWA.loadRadar(currentRadarKey)
-          : await CWA.loadSatellite(currentSatKey);
-        img.onload = () => {
-          const obs = pack.obsTime ? new Date(pack.obsTime).toLocaleString("zh-TW") : "—";
-          meta.textContent = `${pack.desc} · 觀測／產製 ${obs} · ${pack.dataset} · 約 10 分鐘更新`;
-        };
-        img.onerror = () => { meta.textContent = "即時圖資載入失敗"; };
-        img.src = pack.imageUrl;
-        img.alt = pack.desc;
-      } catch (err) {
-        meta.textContent = `即時圖資載入失敗：${err.message || err}`;
+    async function findLatestRadarMs() {
+      let t = floorRadarClock();
+      for (let i = 0; i < 8; i++) {
+        const stamp = stampFromMs(t);
+        const hit = await preloadRadarStamp(stamp);
+        if (hit !== "fail") return t;
+        t -= 10 * 60000;
+      }
+      return floorRadarClock();
+    }
+
+    async function prefetchRadarWindow() {
+      const jobs = [];
+      for (let step = 0; step <= RADAR_STEPS; step++) {
+        jobs.push(preloadRadarStamp(stampFromMs(msFromRadarStep(step))));
+      }
+      await Promise.all(jobs);
+    }
+
+    function layoutRadarOverlay() {
+      const img = document.getElementById("radarOverlayImg");
+      if (!img || img.style.display === "none" || !img.naturalWidth) return;
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      // 圖檔四角對齊地理框（左上 lon0,lat1；右下 lon1,lat0）
+      const tl = project(RADAR_GEO.lon0, RADAR_GEO.lat1, w, h);
+      const br = project(RADAR_GEO.lon1, RADAR_GEO.lat0, w, h);
+      const width = br.x - tl.x;
+      const height = br.y - tl.y;
+      img.style.left = `${tl.x}px`;
+      img.style.top = `${tl.y}px`;
+      img.style.width = `${width}px`;
+      img.style.height = `${height}px`;
+    }
+
+    async function applyRadarStep(step, opts = {}) {
+      radarStep = step;
+      const slider = document.getElementById("radarSlider");
+      if (slider && Number(slider.value) !== step) slider.value = String(step);
+      const ms = msFromRadarStep(step);
+      const stamp = stampFromMs(ms);
+      const label = document.getElementById("radarTimeLabel");
+      if (label) label.textContent = formatRadarLabel(ms);
+
+      let asset = radarCache.get(stamp);
+      if (asset instanceof Promise) asset = await asset;
+      if (!asset) asset = await preloadRadarStamp(stamp);
+      if (asset === "fail" || !asset) {
+        // 缺幀：往較新時間找
+        for (let s = step + 1; s <= RADAR_STEPS; s++) {
+          const alt = stampFromMs(msFromRadarStep(s));
+          let a = radarCache.get(alt);
+          if (a instanceof Promise) a = await a;
+          if (!a) a = await preloadRadarStamp(alt);
+          if (a && a !== "fail") { asset = a; break; }
+        }
+      }
+      const img = document.getElementById("radarOverlayImg");
+      if (asset && asset !== "fail") {
+        if (img.src !== asset.src) img.src = asset.src;
+        img.style.display = "block";
+        if (img.complete) layoutRadarOverlay();
+        else img.onload = () => layoutRadarOverlay();
+      } else if (!opts.silent) {
+        if (label) label.textContent = `${formatRadarLabel(ms)}（無圖）`;
       }
     }
 
-    function startSatAutoRefresh() {
-      if (satTimer) clearInterval(satTimer);
-      satTimer = setInterval(async () => {
-        await refreshLiveImage();
-        try {
-          await CWA.loadRainStations();
-          updateLiveRainPanel();
-          if (mapMode === "live") drawMap();
-        } catch (_) { /* ignore */ }
-      }, 5 * 60 * 1000);
+    async function initRadarOverlay() {
+      const slider = document.getElementById("radarSlider");
+      slider.max = String(RADAR_STEPS);
+      slider.value = String(RADAR_STEPS);
+      document.getElementById("radarTimeLabel").textContent = "對齊最新雷達…";
+      radarLatestMs = await findLatestRadarMs();
+      await prefetchRadarWindow();
+      await applyRadarStep(RADAR_STEPS);
+      // 每 10 分鐘自動滾動時間窗（仍由拉桿決定顯示哪一幀）
+      setInterval(async () => {
+        const prevLatest = radarLatestMs;
+        radarLatestMs = await findLatestRadarMs();
+        if (radarLatestMs !== prevLatest) {
+          await prefetchRadarWindow();
+          // 若使用者停在「現在」，跟著最新；否則保持相對偏移
+          if (radarStep === RADAR_STEPS) await applyRadarStep(RADAR_STEPS);
+          else await applyRadarStep(radarStep);
+        }
+      }, 60 * 1000);
     }
+
+    let mapMode = "pop"; // pop | live
 
     function syncMapModeUi() {
       document.getElementById("mapModePop").classList.toggle("active", mapMode === "pop");
@@ -870,8 +985,8 @@
     }
 
     function liveRainColor(mm, selected) {
-      const a = selected ? 0.78 : 0.55;
-      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.35})`;
+      const a = selected ? 0.42 : 0.28;
+      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.4 : 0.22})`;
       if (mm <= 2) return `rgba(56, 189, 248, ${a})`;
       if (mm <= 5) return `rgba(34, 197, 94, ${a})`;
       if (mm <= 10) return `rgba(234, 179, 8, ${a})`;
@@ -1407,32 +1522,33 @@
 
       if (hoverName) {
         mapCtx.fillStyle = "rgba(15, 23, 42, 0.9)";
-        mapCtx.fillRect(12, h - 36, mapCtx.measureText(hoverName).width + 24, 24);
-        mapCtx.fillStyle = "#e2e8f0";
         mapCtx.font = "12px sans-serif";
+        const tw = mapCtx.measureText(hoverName).width + 24;
+        mapCtx.fillRect(12, 48, tw, 24);
+        mapCtx.fillStyle = "#e2e8f0";
         mapCtx.textAlign = "left";
-        mapCtx.fillText(hoverName, 22, h - 20);
+        mapCtx.fillText(hoverName, 22, 64);
       }
 
       // 裝置定位標記
       if (userPos) {
         const p = project(userPos.lon, userPos.lat, w, h);
-        if (p.x > -20 && p.x < w + 20 && p.y > -20 && p.y < h + 20) {
-          const pulse = 10 + Math.sin(performance.now() / 280) * 3;
+        if (p.x >= 0 && p.x <= w && p.y >= 0 && p.y <= h) {
           mapCtx.beginPath();
-          mapCtx.arc(p.x, p.y, pulse, 0, Math.PI * 2);
+          mapCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
           mapCtx.fillStyle = "rgba(56, 189, 248, 0.25)";
           mapCtx.fill();
           mapCtx.beginPath();
-          mapCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+          mapCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
           mapCtx.fillStyle = "#38bdf8";
           mapCtx.fill();
           mapCtx.strokeStyle = "#fff";
-          mapCtx.lineWidth = 2;
+          mapCtx.lineWidth = 1.5;
           mapCtx.stroke();
         }
       }
 
+      layoutRadarOverlay();
       requestAnimationFrame(drawMap);
     }
 
@@ -1867,22 +1983,9 @@
     drawMap();
     document.title = "YijiaMango_Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => locateDevice(true));
-    initSatTabs();
     syncMapModeUi();
-    document.getElementById("satRefreshBtn").addEventListener("click", () => refreshLiveImage());
-    document.getElementById("liveModeRadar").addEventListener("click", () => {
-      liveLayer = "radar";
-      document.getElementById("liveModeRadar").classList.add("active");
-      document.getElementById("liveModeSat").classList.remove("active");
-      initSatTabs();
-      refreshLiveImage();
-    });
-    document.getElementById("liveModeSat").addEventListener("click", () => {
-      liveLayer = "sat";
-      document.getElementById("liveModeSat").classList.add("active");
-      document.getElementById("liveModeRadar").classList.remove("active");
-      initSatTabs();
-      refreshLiveImage();
+    document.getElementById("radarSlider").addEventListener("input", (e) => {
+      applyRadarStep(parseInt(e.target.value, 10));
     });
     document.getElementById("mapModePop").addEventListener("click", () => {
       mapMode = "pop";
@@ -1894,7 +1997,14 @@
       syncMapModeUi();
       drawMap();
     });
-    startSatAutoRefresh();
+    // 雨量站背景更新（不影響雷達拉桿）
+    setInterval(async () => {
+      try {
+        await CWA.loadRainStations();
+        updateLiveRainPanel();
+        if (mapMode === "live") drawMap();
+      } catch (_) { /* ignore */ }
+    }, 5 * 60 * 1000);
   </script>
 </body>
 </html>
