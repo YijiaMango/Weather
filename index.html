@@ -213,14 +213,20 @@
       gap: 10px;
       margin-top: 10px;
     }
+    .metric-grid.dense {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
     .metric-box {
       background: #0f172a;
       padding: 10px;
       border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
+    .metric-box.span2 { grid-column: 1 / -1; }
     .metric-label { font-size: 0.75rem; color: var(--text-sub); }
     .metric-value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
+    .metric-value.sm { font-size: 0.92rem; line-height: 1.35; font-weight: 600; }
     .badge {
       display: inline-block;
       padding: 3px 8px;
@@ -253,7 +259,7 @@
     }
     canvas#chartCanvas {
       width: 100%;
-      height: 140px;
+      height: 168px;
       display: block;
     }
     .chart-legend {
@@ -329,14 +335,14 @@
 
     <div class="timeline-card">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span style="font-weight: 600; font-size: 0.95rem;">未來一週降雨預報</span>
+        <span style="font-weight: 600; font-size: 0.95rem;">未來一週官方預報</span>
         <div class="chart-legend">
-          <span><span class="dot" style="background:#34d399;"></span>降雨機率 (官方)</span>
-          <span><span class="dot" style="background:#38bdf8;"></span>溫度區間</span>
+          <span><span class="dot" style="background:#34d399;"></span>降雨機率</span>
+          <span><span class="dot" style="background:#38bdf8;"></span>氣溫</span>
         </div>
       </div>
       <div class="week-strip" id="weekStrip"></div>
-      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日時段預報</div>
+      <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-sub);" id="dayChartTitle">今日逐時預報</div>
       <div class="time-slider-wrapper">
         <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
         <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
@@ -367,22 +373,50 @@
           </div>
           <div class="location-name" id="locName">全台總覽</div>
           <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 2px;" id="coordsText">點擊縣市進入鄉鎮細分</div>
-          <div class="metric-grid">
+          <div class="metric-grid dense" id="metricGrid">
             <div class="metric-box">
               <div class="metric-label">天氣現象</div>
-              <div class="metric-value" id="valWx" style="font-size:0.95rem;">—</div>
+              <div class="metric-value sm" id="valWx">—</div>
             </div>
             <div class="metric-box">
               <div class="metric-label">降雨機率</div>
               <div class="metric-value" id="valPop">—</div>
             </div>
             <div class="metric-box">
-              <div class="metric-label">最低溫</div>
-              <div class="metric-value" id="valMinT">—</div>
+              <div class="metric-label">氣溫</div>
+              <div class="metric-value" id="valT">—</div>
             </div>
             <div class="metric-box">
-              <div class="metric-label">最高溫</div>
-              <div class="metric-value" id="valMaxT">—</div>
+              <div class="metric-label">體感溫度</div>
+              <div class="metric-value" id="valAt">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">最低／最高溫</div>
+              <div class="metric-value sm" id="valMinMax">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">相對濕度</div>
+              <div class="metric-value" id="valRh">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">露點溫度</div>
+              <div class="metric-value" id="valTd">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">舒適度</div>
+              <div class="metric-value sm" id="valCi">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">風向／風速</div>
+              <div class="metric-value sm" id="valWind">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">紫外線</div>
+              <div class="metric-value sm" id="valUvi">—</div>
+            </div>
+            <div class="metric-box span2">
+              <div class="metric-label">資料解析度</div>
+              <div class="metric-value sm" id="valRes">—</div>
             </div>
           </div>
         </div>
@@ -501,7 +535,15 @@
       const { wd, md } = formatDayLabel(currentDayOffset);
       const hh = String(currentHour).padStart(2, "0");
       timeOverlay.textContent = `預報：${wd} ${md} ${hh}:00`;
-      dayChartTitle.textContent = `${wd} ${md} · 官方時段預報（12h）`;
+      const res = selectedCounty
+        ? (CWA.dayOutlookFromPack(
+            selectedCounty.properties.COUNTYNAME,
+            selectedTown?.properties.TOWNNAME,
+            currentDayOffset
+          ).resolution || "—")
+        : "—";
+      const resLabel = res === "3h" ? "近程 3h 降雨機率＋逐時氣溫" : res === "12h" ? "12h 時段預報" : "官方時段";
+      dayChartTitle.textContent = `${wd} ${md} · ${resLabel}`;
     }
     syncTimeOverlay();
     const mapCanvas = document.getElementById("mapCanvas");
@@ -525,6 +567,13 @@
       citySelect.appendChild(opt);
     }
 
+    function activeCountyName() {
+      return selectedCounty?.properties.COUNTYNAME || "";
+    }
+    function activeTownName() {
+      return selectedTown?.properties.TOWNNAME || "";
+    }
+
     function activePeriods() {
       if (!window.CWA || !CWA.hasKey()) return [];
       if (selectedTown && selectedCounty) {
@@ -537,21 +586,20 @@
     }
 
     function forecastAt(hour = currentHour, day = currentDayOffset) {
-      const periods = activePeriods();
-      if (!periods.length) return null;
-      return CWA.pickPeriod(periods, day, hour);
+      if (!window.CWA || !activeCountyName()) return null;
+      return CWA.snapshot(activeCountyName(), activeTownName() || null, day, hour);
     }
 
     function dailyOutlook(day) {
-      const periods = activePeriods();
-      if (!periods.length) return { maxPop: 0, avgPop: 0, peakHour: 12, wx: "—", minT: "—", maxT: "—", count: 0 };
-      const o = CWA.dayOutlook(periods, day);
-      let peakHour = 12;
-      if (o.periods && o.periods.length) {
-        const top = o.periods.slice().sort((a, b) => b.pop - a.pop)[0];
-        peakHour = CWA.hourOf(top.start);
+      if (!window.CWA || !activeCountyName()) {
+        return { maxPop: 0, avgPop: 0, peakHour: 12, wx: "—", minT: "—", maxT: "—", count: 0 };
       }
-      return { ...o, peakHour };
+      return CWA.dayOutlookFromPack(activeCountyName(), activeTownName() || null, day);
+    }
+
+    function activeHourlySeries(day = currentDayOffset) {
+      if (!window.CWA || !activeCountyName()) return [];
+      return CWA.hourlySeries(activeCountyName(), activeTownName() || null, day);
     }
 
     function popForCountyFeature(countyFeature, hour = currentHour, day = currentDayOffset) {
@@ -581,7 +629,8 @@
 
     function renderWeekStrip() {
       weekStrip.innerHTML = "";
-      const ready = !!(selectedCounty || selectedTown) && window.CWA && CWA.hasKey() && activePeriods().length;
+      const ready = !!(selectedCounty || selectedTown) && window.CWA && CWA.hasKey() &&
+        !!(CWA.cache.packs?.[CWA.normName(activeCountyName())] || activePeriods().length);
       for (let day = 0; day < 7; day++) {
         const { wd, md } = formatDayLabel(day);
         const outlook = ready ? dailyOutlook(day) : { maxPop: 0, avgPop: 0, wx: "—" };
@@ -595,7 +644,7 @@
           `<div class="pp">${ready ? outlook.maxPop + "%" : "—"}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
-          if (ready) currentHour = dailyOutlook(day).peakHour;
+          if (ready) currentHour = dailyOutlook(day).peakHour ?? 12;
           else if (day === 0) currentHour = new Date().getHours();
           else currentHour = 12;
           timeSlider.value = currentHour;
@@ -651,15 +700,16 @@
     }
 
     async function ensureCountyWeekly(countyName) {
-      setDataBanner(`載入 ${countyName} 鄉鎮一週官方預報…`, false);
+      setDataBanner(`載入 ${countyName} 官方預報（3天細＋一週）…`, false);
       try {
-        const pack = await CWA.loadCountyWeekly(countyName);
+        const pack = await CWA.loadCountyForecast(countyName);
         setDataBanner("");
         document.getElementById("dataSourceHint").textContent =
-          `資料來源：中央氣象署 ${pack.dataset} · ${countyName} · ${new Date(pack.at).toLocaleString("zh-TW")}`;
+          `資料來源：中央氣象署 ${pack.datasets.day3}＋${pack.datasets.week} · ${countyName} · ${new Date(pack.at).toLocaleString("zh-TW")}`;
       } catch (err) {
-        setDataBanner(`${countyName} 一週預報載入失敗：${err.message || err}`, true);
+        setDataBanner(`${countyName} 預報載入失敗：${err.message || err}`, true);
       }
+      syncTimeOverlay();
       updateInfoPanel();
       drawChart();
     }
@@ -770,6 +820,16 @@
       });
     }
 
+    function clearMetrics() {
+      ["valWx", "valPop", "valT", "valAt", "valMinMax", "valRh", "valTd", "valCi", "valWind", "valUvi", "valRes"]
+        .forEach((id) => { document.getElementById(id).textContent = "—"; });
+    }
+
+    function deg(v, suffix = "°C") {
+      if (v == null || v === "" || v === "—") return "—";
+      return `${v}${suffix}`;
+    }
+
     function updateInfoPanel() {
       renderWeekStrip();
       const target = activeTarget();
@@ -783,13 +843,10 @@
       if (!target) {
         document.getElementById("locName").textContent = "全台總覽";
         document.getElementById("coordsText").textContent = "點擊縣市進入鄉鎮細分";
-        document.getElementById("valWx").textContent = "—";
-        document.getElementById("valPop").textContent = "—";
-        document.getElementById("valMinT").textContent = "—";
-        document.getElementById("valMaxT").textContent = "—";
+        clearMetrics();
         badge.className = "badge badge-none";
         badge.textContent = "請選取";
-        advice.textContent = "已連接中央氣象署。點擊縣市後載入該縣鄉鎮一週官方預報。";
+        advice.textContent = "已連接中央氣象署。點擊縣市後載入該縣 3 天細預報與一週官方資料。";
         hint.textContent = "目前層級：縣市總覽";
         return;
       }
@@ -813,10 +870,7 @@
       }
 
       if (!data) {
-        document.getElementById("valWx").textContent = "—";
-        document.getElementById("valPop").textContent = "—";
-        document.getElementById("valMinT").textContent = "—";
-        document.getElementById("valMaxT").textContent = "—";
+        clearMetrics();
         badge.className = "badge badge-none";
         badge.textContent = "載入中";
         advice.textContent = "正在等待該地區官方預報資料…";
@@ -824,10 +878,38 @@
         return;
       }
 
+      if (data.resolution === "—") {
+        clearMetrics();
+        document.getElementById("valRes").textContent = "此時段尚無官方預報點";
+        badge.className = "badge badge-none";
+        badge.textContent = "無此時段";
+        advice.textContent = "官方近程預報尚未覆蓋到此小時（通常從最近發布時刻起算）。請拖曳時間軸或改選有資料的時段。";
+        hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區（官方）" : "目前層級：縣市（官方）";
+        return;
+      }
+
       document.getElementById("valWx").textContent = data.wx || "—";
       document.getElementById("valPop").textContent = `${data.pop} %`;
-      document.getElementById("valMinT").textContent = data.minT !== "—" && data.minT !== "" ? `${data.minT}°C` : "—";
-      document.getElementById("valMaxT").textContent = data.maxT !== "—" && data.maxT !== "" ? `${data.maxT}°C` : "—";
+      document.getElementById("valT").textContent = deg(data.t);
+      document.getElementById("valAt").textContent = deg(data.at);
+      document.getElementById("valMinMax").textContent =
+        (data.minT && data.minT !== "—" && data.maxT && data.maxT !== "—")
+          ? `${data.minT}–${data.maxT}°C`
+          : "—";
+      document.getElementById("valRh").textContent = data.rh ? `${data.rh}%` : "—";
+      document.getElementById("valTd").textContent = deg(data.td);
+      document.getElementById("valCi").textContent =
+        data.ciDesc || data.ci ? `${data.ciDesc || ""}${data.ci ? `（${data.ci}）` : ""}`.trim() : "—";
+      const windParts = [];
+      if (data.windDir) windParts.push(data.windDir);
+      if (data.windSpeed) windParts.push(`${data.windSpeed} m/s`);
+      if (data.beaufort) windParts.push(`${data.beaufort} 級`);
+      document.getElementById("valWind").textContent = windParts.length ? windParts.join(" · ") : "—";
+      document.getElementById("valUvi").textContent =
+        data.uvi ? `${data.uvi}${data.uviLevel ? `（${data.uviLevel}）` : ""}` : "—";
+      const resMap = { "3h": "3 小時降雨機率＋逐時氣溫", "12h": "12 小時時段", "1h": "逐時氣溫" };
+      document.getElementById("valRes").textContent = resMap[data.resolution] || data.resolution || "—";
+
       hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區（官方）" : "目前層級：縣市（官方）";
 
       if (data.pop >= 70) {
@@ -844,11 +926,9 @@
         badge.textContent = "降雨機率低";
       }
 
-      const range = (data.minT && data.maxT && data.minT !== "—" && data.maxT !== "—")
-        ? `氣溫 ${data.minT}–${data.maxT}°C`
-        : "";
-      advice.textContent = `【中央氣象署】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%${range ? "｜" + range : ""}` +
-        (data.desc ? `｜${data.desc}` : "");
+      advice.textContent = data.desc
+        ? `【中央氣象署】${name}｜${data.desc}`
+        : `【中央氣象署】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%`;
     }
 
     async function enterCounty(countyFeature, fit = true) {
@@ -1140,9 +1220,10 @@
         chartCtx.fillText("選取縣市或鄉鎮後顯示中央氣象署預報", w / 2, h / 2);
         return;
       }
-      const outlook = dailyOutlook(currentDayOffset);
-      const periods = outlook.periods || [];
-      if (!periods.length) {
+
+      const hourlyData = activeHourlySeries(currentDayOffset);
+      const hasAny = hourlyData.some((d) => d.resolution !== "—");
+      if (!hasAny) {
         chartCtx.fillStyle = "#64748b";
         chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
         chartCtx.textAlign = "center";
@@ -1160,31 +1241,69 @@
         chartCtx.stroke();
       }
 
-      const n = periods.length;
-      const slotWidth = chartW / n;
+      const slotWidth = chartW / 24;
       const barWidth = slotWidth * 0.62;
-      const active = forecastAt(currentHour, currentDayOffset);
 
-      periods.forEach((p, i) => {
-        const barH = Math.min(chartH, (p.pop / 100) * chartH);
-        const x = paddingLeft + i * slotWidth + (slotWidth - barWidth) / 2;
+      hourlyData.forEach((d, hr) => {
+        const barH = Math.min(chartH, (d.pop / 100) * chartH);
+        const x = paddingLeft + hr * slotWidth + (slotWidth - barWidth) / 2;
         const y = 10 + chartH - barH;
-        const isActive = active && active.start === p.start;
-        chartCtx.fillStyle = isActive ? "#34d399" : "rgba(52, 211, 153, 0.4)";
-        chartCtx.fillRect(x, y, barWidth, barH);
+        chartCtx.fillStyle = hr === currentHour ? "#34d399" : "rgba(52, 211, 153, 0.4)";
+        chartCtx.fillRect(x, y, barWidth, Math.max(0, barH));
 
-        chartCtx.fillStyle = "#94a3b8";
-        chartCtx.font = "10px sans-serif";
-        chartCtx.textAlign = "center";
-        const labelH = CWA.hourOf(p.start);
-        chartCtx.fillText(`${String(labelH).padStart(2, "0")}時`, x + barWidth / 2, h - 8);
-
-        if (p.maxT && p.maxT !== "—") {
-          chartCtx.fillStyle = "#38bdf8";
+        if (hr % 3 === 0) {
+          chartCtx.fillStyle = "#94a3b8";
           chartCtx.font = "10px sans-serif";
-          chartCtx.fillText(`${p.maxT}°`, x + barWidth / 2, Math.max(18, y - 4));
+          chartCtx.textAlign = "center";
+          chartCtx.fillText(`${String(hr).padStart(2, "0")}`, x + barWidth / 2, h - 8);
         }
       });
+
+      // 氣溫折線（有逐時溫度時）
+      const temps = hourlyData.map((d) => parseFloat(d.t)).filter((n) => !Number.isNaN(n));
+      if (temps.length >= 2) {
+        const tMin = Math.min(...temps) - 1;
+        const tMax = Math.max(...temps) + 1;
+        const span = Math.max(1, tMax - tMin);
+        chartCtx.beginPath();
+        let started = false;
+        hourlyData.forEach((d, hr) => {
+          const tv = parseFloat(d.t);
+          if (Number.isNaN(tv)) return;
+          const x = paddingLeft + hr * slotWidth + slotWidth / 2;
+          const y = 10 + chartH - ((tv - tMin) / span) * chartH;
+          if (!started) { chartCtx.moveTo(x, y); started = true; }
+          else chartCtx.lineTo(x, y);
+        });
+        chartCtx.strokeStyle = "#38bdf8";
+        chartCtx.lineWidth = 2;
+        chartCtx.stroke();
+
+        hourlyData.forEach((d, hr) => {
+          const tv = parseFloat(d.t);
+          if (Number.isNaN(tv) || hr % 3 !== 0) return;
+          const x = paddingLeft + hr * slotWidth + slotWidth / 2;
+          const y = 10 + chartH - ((tv - tMin) / span) * chartH;
+          chartCtx.fillStyle = "#38bdf8";
+          chartCtx.beginPath();
+          chartCtx.arc(x, y, 2.5, 0, Math.PI * 2);
+          chartCtx.fill();
+          chartCtx.font = "9px sans-serif";
+          chartCtx.textAlign = "center";
+          chartCtx.fillText(`${tv}°`, x, Math.max(14, y - 6));
+        });
+      }
+
+      // 目前時刻標線
+      const ax = paddingLeft + currentHour * slotWidth + slotWidth / 2;
+      chartCtx.strokeStyle = "rgba(248, 250, 252, 0.35)";
+      chartCtx.lineWidth = 1;
+      chartCtx.setLineDash([4, 4]);
+      chartCtx.beginPath();
+      chartCtx.moveTo(ax, 10);
+      chartCtx.lineTo(ax, 10 + chartH);
+      chartCtx.stroke();
+      chartCtx.setLineDash([]);
     }
 
     function hitTest(lon, lat) {
@@ -1490,7 +1609,7 @@
       mapCanvas.height = wrap.clientHeight;
       const chartCard = chartCanvas.parentElement;
       chartCanvas.width = chartCard.clientWidth - 32;
-      chartCanvas.height = 140;
+      chartCanvas.height = 168;
       updateInfoPanel();
       drawChart();
     }
