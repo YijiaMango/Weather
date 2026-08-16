@@ -568,9 +568,60 @@
     const s = toMs(p.start);
     const e = p.end ? toMs(p.end) : s + 3 * 3600 * 1000;
     if (Number.isNaN(s)) return dayKey(p.start) === targetDay && hourOf(p.start) === hour;
-    const dt = new Date(`${targetDay}T${String(hour).padStart(2, "0")}:00:00`);
-    const t = dt.getTime();
+    const t = toMs(`${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`);
+    if (Number.isNaN(t)) return false;
     return t >= s && t < e;
+  }
+
+  /** 精確涵蓋 → 否則用當日最早／最晚時段回填（補滿已過小時） */
+  function slotForHour(list, dayOffset, hour) {
+    if (!list || !list.length) return null;
+    const exact = list.find((p) => coversHour(p, dayOffset, hour));
+    if (exact) return exact;
+
+    const overlapping = list.filter((p) => {
+      for (let h = 0; h < 24; h++) {
+        if (coversHour(p, dayOffset, h)) return true;
+      }
+      return false;
+    });
+    const pool = overlapping.length ? overlapping : list;
+    const targetDay = addDaysKey(todayKey(), dayOffset);
+    const hourMs = toMs(`${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`);
+    const ranked = pool.slice().sort((a, b) => toMs(a.start) - toMs(b.start));
+    const first = ranked[0];
+    const last = ranked[ranked.length - 1];
+    if (!Number.isNaN(hourMs) && hourMs < toMs(first.start)) return first;
+    const lastEnd = last.end ? toMs(last.end) : toMs(last.start) + 3 * 3600 * 1000;
+    if (!Number.isNaN(hourMs) && hourMs >= lastEnd) return last;
+    return pickPeriod(pool, dayOffset, hour);
+  }
+
+  function hourPointFor(hourly, targetDay, hour) {
+    if (!hourly || !hourly.length) return null;
+    const hourIsoGuess = `${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`;
+    const exact = hourly.find((x) => dayKey(x.start) === targetDay && hourOf(x.start) === hour)
+      || covering(hourly.map((x) => ({ ...x })), hourIsoGuess);
+    if (exact) return exact;
+
+    const sameDay = hourly
+      .filter((x) => dayKey(x.start) === targetDay)
+      .slice()
+      .sort((a, b) => hourOf(a.start) - hourOf(b.start));
+    const pool = sameDay.length ? sameDay : hourly.slice().sort((a, b) => toMs(a.start) - toMs(b.start));
+    if (!pool.length) return null;
+    if (hour <= hourOf(pool[0].start)) return pool[0];
+    if (hour >= hourOf(pool[pool.length - 1].start)) return pool[pool.length - 1];
+    let best = pool[0];
+    let bestScore = Infinity;
+    for (const p of pool) {
+      const score = Math.abs(hourOf(p.start) - hour);
+      if (score < bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    return best;
   }
 
   function hourlySeries(countyName, townName, dayOffset) {
@@ -579,12 +630,18 @@
     const out = [];
     for (let h = 0; h < 24; h++) {
       const hourIsoGuess = `${targetDay}T${String(h).padStart(2, "0")}:00:00+08:00`;
-      const hourPoint = (pack.hourly || []).find((x) => dayKey(x.start) === targetDay && hourOf(x.start) === h)
-        || covering((pack.hourly || []).map((x) => ({ ...x })), hourIsoGuess);
-      const slot3 = (pack.slots3h || []).find((p) => coversHour(p, dayOffset, h));
-      const slot12 = (pack.weekly || []).find((p) => coversHour(p, dayOffset, h));
+      const hourPoint = hourPointFor(pack.hourly || [], targetDay, h);
+      const slot3 = slotForHour(pack.slots3h || [], dayOffset, h);
+      const slot12 = slotForHour(pack.weekly || [], dayOffset, h);
+      const covered3 = (pack.slots3h || []).some((p) => coversHour(p, dayOffset, h));
+      const covered12 = (pack.weekly || []).some((p) => coversHour(p, dayOffset, h));
       const pop = slot3 ? slot3.pop : (slot12 ? slot12.pop : 0);
-      const src = slot3 ? "3h" : (slot12 ? "12h" : (hourPoint ? "1h" : "—"));
+      let src = "—";
+      if (covered3) src = "3h";
+      else if (covered12) src = "12h";
+      else if (slot3) src = "3h~";
+      else if (slot12) src = "12h~";
+      else if (hourPoint) src = "1h";
       out.push({
         hour: h,
         start: hourPoint?.start || slot3?.start || slot12?.start || hourIsoGuess,
