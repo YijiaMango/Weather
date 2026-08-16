@@ -76,13 +76,7 @@
       align-items: center;
       gap: 8px;
     }
-    .controls-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-    select, button {
+    button {
       background: #0f172a;
       color: var(--text-main);
       border: 1px solid var(--border);
@@ -93,7 +87,7 @@
       outline: none;
       transition: all 0.2s ease;
     }
-    select:hover, button:hover { border-color: var(--accent); }
+    button:hover { border-color: var(--accent); }
     button.primary {
       background: var(--accent);
       border-color: var(--accent);
@@ -409,11 +403,6 @@
         <div style="font-size:0.95rem;font-weight:600;color:#38bdf8;margin-top:2px;">台灣降雨小幫手</div>
         <div class="breadcrumb" id="breadcrumb" style="margin-top:6px;"></div>
       </div>
-      <div class="controls-group">
-        <select id="citySelect">
-          <option value="">選擇縣市</option>
-        </select>
-      </div>
     </div>
 
     <div id="dataBanner" style="display:none;background:#0f3d2e;border:1px solid #34d399;color:#bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.88rem;line-height:1.45;"></div>
@@ -596,8 +585,6 @@
       targetSpan: MAINLAND_VIEW.span
     };
 
-    const citySelect = document.getElementById("citySelect");
-    // town 改點地圖；定位／全台改雙擊地圖切換
     const timeSlider = document.getElementById("timeSlider");
     const timeOverlay = document.getElementById("timeOverlay");
     const weekStrip = document.getElementById("weekStrip");
@@ -641,22 +628,6 @@
     const chartCanvas = document.getElementById("chartCanvas");
     const mapCtx = mapCanvas.getContext("2d");
     const chartCtx = chartCanvas.getContext("2d");
-
-    // 縣市選單（本島優先）
-    const countyNames = countyFC.features
-      .map(f => f.properties.COUNTYNAME)
-      .sort((a, b) => {
-        const ao = OFFSHORE.has(a) ? 1 : 0;
-        const bo = OFFSHORE.has(b) ? 1 : 0;
-        if (ao !== bo) return ao - bo;
-        return a.localeCompare(b, "zh-Hant");
-      });
-    for (const name of countyNames) {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      citySelect.appendChild(opt);
-    }
 
     function activeCountyName() {
       return selectedCounty?.properties.COUNTYNAME || "";
@@ -1251,7 +1222,6 @@
       selectedCounty = countyFeature;
       selectedTown = null;
       viewLevel = "town";
-      citySelect.value = countyFeature.properties.COUNTYNAME;
       if (fit) fitToBBox(countyFeature._bbox, OFFSHORE.has(countyFeature.properties.COUNTYNAME) ? 1.35 : 1.15);
       updateInfoPanel();
       drawChart();
@@ -1264,7 +1234,6 @@
       selectedTown = townFeature;
       selectedCounty = countyFC.features.find(c => c.properties.COUNTYNAME === townFeature.properties.COUNTYNAME) || selectedCounty;
       viewLevel = "town";
-      citySelect.value = townFeature.properties.COUNTYNAME;
       if (!keepView) {
         if (fitTown) {
           const b = townFeature._bbox;
@@ -1321,7 +1290,7 @@
     function locateDevice(isAuto = false) {
       if (!navigator.geolocation) {
         document.getElementById("weatherAdvice").textContent =
-          "此瀏覽器不支援定位。請改用縣市選單或點擊地圖選擇鄉鎮。";
+          "此瀏覽器不支援定位。請點擊地圖選擇縣市／鄉鎮。";
         return;
       }
       if (locating) return;
@@ -1342,10 +1311,10 @@
           locating = false;
           locateFocus = false;
           const msg = err.code === 1
-            ? "你拒絕了定位權限。可雙擊地圖再試，或手動選縣市／點地圖選鄉鎮。"
+            ? "你拒絕了定位權限。可雙擊地圖再試，或點地圖選縣市／鄉鎮。"
             : err.code === 2
-              ? "無法取得位置（訊號或裝置問題）。請手動選縣市或點地圖。"
-              : "定位逾時。再雙擊地圖試試，或手動選縣市。";
+              ? "無法取得位置（訊號或裝置問題）。請點地圖選縣市／鄉鎮。"
+              : "定位逾時。再雙擊地圖試試，或點地圖選縣市。";
           document.getElementById("weatherAdvice").textContent = msg;
           document.getElementById("levelHint").textContent = isAuto ? "定位失敗，顯示全台總覽" : "定位失敗";
         },
@@ -1358,7 +1327,6 @@
       viewLevel = "county";
       selectedCounty = null;
       selectedTown = null;
-      citySelect.value = "";
       camera.targetLon = MAINLAND_VIEW.lon;
       camera.targetLat = MAINLAND_VIEW.lat;
       camera.targetSpan = MAINLAND_VIEW.span;
@@ -1934,13 +1902,6 @@
     mapCanvas.addEventListener("gesturestart", e => e.preventDefault());
     mapCanvas.addEventListener("gesturechange", e => e.preventDefault());
     mapCanvas.addEventListener("gestureend", e => e.preventDefault());
-
-    citySelect.addEventListener("change", e => {
-      const name = e.target.value;
-      if (!name) { resetOverview(); return; }
-      const found = countyFC.features.find(c => c.properties.COUNTYNAME === name);
-      if (found) enterCounty(found, true);
-    });
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
