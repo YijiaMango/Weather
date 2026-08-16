@@ -325,7 +325,11 @@
       padding: 6px 10px;
       font-size: 0.8rem;
     }
-    .sat-tabs button.active {
+    .sat-tabs button.active,
+    #liveModeRadar.active,
+    #liveModeSat.active,
+    #mapModePop.active,
+    #mapModeLive.active {
       background: var(--accent);
       border-color: var(--accent);
       font-weight: 600;
@@ -402,18 +406,31 @@
       <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
     </div>
 
-    <div class="sat-card">
+    <div class="sat-card" id="liveCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span style="font-weight:600;font-size:0.95rem;">衛星雲圖（中央氣象署）</span>
-        <button type="button" id="satRefreshBtn" title="重新整理雲圖">重新整理</button>
+        <span style="font-weight:600;font-size:0.95rem;">即時監測（約每 10 分鐘）</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" id="liveModeRadar" class="active">雷達回波</button>
+          <button type="button" id="liveModeSat">衛星雲圖</button>
+          <button type="button" id="satRefreshBtn" title="重新整理">重新整理</button>
+        </div>
       </div>
+      <div class="hint" style="margin:0;">對齊 NCDR「落雨小幫手」的即時層：雷達／雨量站觀測。下方一週圖仍是鄉鎮預報（3h／12h），兩者用途不同。</div>
       <div class="sat-tabs" id="satTabs"></div>
+      <div class="metric-grid dense" id="liveRainGrid" style="margin-top:2px;">
+        <div class="metric-box"><div class="metric-label">測站</div><div class="metric-value sm" id="liveStation">—</div></div>
+        <div class="metric-box"><div class="metric-label">觀測時間</div><div class="metric-value sm" id="liveObsTime">—</div></div>
+        <div class="metric-box"><div class="metric-label">近 10 分雨量</div><div class="metric-value" id="liveRain10">—</div></div>
+        <div class="metric-box"><div class="metric-label">近 1 小時</div><div class="metric-value" id="liveRain1h">—</div></div>
+        <div class="metric-box"><div class="metric-label">近 3 小時</div><div class="metric-value" id="liveRain3h">—</div></div>
+        <div class="metric-box"><div class="metric-label">近 24 小時</div><div class="metric-value" id="liveRain24h">—</div></div>
+      </div>
       <div class="sat-frame">
-        <img id="satImage" alt="中央氣象署衛星雲圖" />
+        <img id="satImage" alt="中央氣象署即時監測圖" />
       </div>
       <div class="sat-meta">
-        <span id="satMetaText">載入衛星雲圖中…</span>
-        <a id="satOfficialLink" href="https://www.cwa.gov.tw/V8/C/W/OBS_Sat.html" target="_blank" rel="noopener" style="color:#38bdf8;">氣象署衛星頁</a>
+        <span id="satMetaText">載入即時圖資中…</span>
+        <a id="satOfficialLink" href="https://www.cwa.gov.tw/V8/C/W/OBS_Radar.html" target="_blank" rel="noopener" style="color:#38bdf8;">氣象署雷達頁</a>
       </div>
     </div>
 
@@ -422,10 +439,14 @@
         <canvas id="mapCanvas"></canvas>
         <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
         <div class="legend">
-          <span>降雨機率 (%)</span>
-          <div class="legend-bar"></div>
+          <span id="legendTitle">降雨機率 (%)</span>
+          <div class="legend-bar" id="legendBar"></div>
           <div class="legend-labels">
-            <span>0</span><span>50</span><span>100</span>
+            <span id="legendLo">0</span><span id="legendMid">50</span><span id="legendHi">100</span>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:4px;">
+            <button type="button" id="mapModePop" class="active" style="padding:4px 8px;font-size:0.72rem;">預報</button>
+            <button type="button" id="mapModeLive" style="padding:4px 8px;font-size:0.72rem;">即時雨量</button>
           </div>
         </div>
       </div>
@@ -750,67 +771,153 @@
 
     async function bootstrapCwa() {
       const hint = document.getElementById("dataSourceHint");
-      setDataBanner("正在載入中央氣象署官方預報…", false);
+      setDataBanner("正在載入中央氣象署官方預報與即時觀測…", false);
       try {
-        await CWA.loadCounty36h();
+        await Promise.all([CWA.loadCounty36h(), CWA.loadRainStations()]);
         setDataBanner("");
-        hint.textContent = `資料來源：中央氣象署 Open Data · 縣市預報已載入 · ${new Date().toLocaleString("zh-TW")}`;
+        hint.textContent = `資料來源：中央氣象署 Open Data · 預報＋即時雨量站 · ${new Date().toLocaleString("zh-TW")}`;
         if (selectedCounty) await ensureCountyWeekly(selectedCounty.properties.COUNTYNAME);
         updateInfoPanel();
         drawChart();
+        drawMap();
       } catch (err) {
         setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
         hint.textContent = "資料來源：中央氣象署 Open Data（載入失敗）";
       }
-      await loadSatelliteImage(currentSatKey);
+      await refreshLiveImage();
     }
 
+    let liveLayer = "radar"; // radar | sat
     let currentSatKey = "tw_color_hi";
+    let currentRadarKey = "near";
+    let mapMode = "pop"; // pop | live
     let satTimer = null;
+
+    function productMap() {
+      return liveLayer === "radar" ? CWA.RADAR_PRODUCTS : CWA.SAT_PRODUCTS;
+    }
+    function currentProductKey() {
+      return liveLayer === "radar" ? currentRadarKey : currentSatKey;
+    }
 
     function initSatTabs() {
       const tabs = document.getElementById("satTabs");
       tabs.innerHTML = "";
-      Object.entries(CWA.SAT_PRODUCTS).forEach(([key, prod]) => {
+      const products = productMap();
+      const activeKey = currentProductKey();
+      Object.entries(products).forEach(([key, prod]) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = prod.label;
         btn.dataset.key = key;
-        if (key === currentSatKey) btn.classList.add("active");
+        if (key === activeKey) btn.classList.add("active");
         btn.addEventListener("click", () => {
-          currentSatKey = key;
+          if (liveLayer === "radar") currentRadarKey = key;
+          else currentSatKey = key;
           tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.key === key));
-          loadSatelliteImage(key);
+          refreshLiveImage();
         });
         tabs.appendChild(btn);
       });
     }
 
-    async function loadSatelliteImage(productKey = currentSatKey) {
+    async function refreshLiveImage() {
       const img = document.getElementById("satImage");
       const meta = document.getElementById("satMetaText");
-      meta.textContent = "載入衛星雲圖中…";
+      const link = document.getElementById("satOfficialLink");
+      meta.textContent = liveLayer === "radar" ? "載入雷達回波中…" : "載入衛星雲圖中…";
+      link.href = liveLayer === "radar"
+        ? "https://www.cwa.gov.tw/V8/C/W/OBS_Radar.html"
+        : "https://www.cwa.gov.tw/V8/C/W/OBS_Sat.html";
+      link.textContent = liveLayer === "radar" ? "氣象署雷達頁" : "氣象署衛星頁";
       try {
-        const pack = await CWA.loadSatellite(productKey);
+        const pack = liveLayer === "radar"
+          ? await CWA.loadRadar(currentRadarKey)
+          : await CWA.loadSatellite(currentSatKey);
         img.onload = () => {
-          const obs = pack.obsTime
-            ? new Date(pack.obsTime).toLocaleString("zh-TW")
-            : "—";
-          meta.textContent = `${pack.desc} · 觀測 ${obs} · ${pack.dataset}`;
+          const obs = pack.obsTime ? new Date(pack.obsTime).toLocaleString("zh-TW") : "—";
+          meta.textContent = `${pack.desc} · 觀測／產製 ${obs} · ${pack.dataset} · 約 10 分鐘更新`;
         };
-        img.onerror = () => {
-          meta.textContent = "雲圖影像載入失敗（圖檔來源暫時不可用）";
-        };
+        img.onerror = () => { meta.textContent = "即時圖資載入失敗"; };
         img.src = pack.imageUrl;
         img.alt = pack.desc;
       } catch (err) {
-        meta.textContent = `雲圖載入失敗：${err.message || err}`;
+        meta.textContent = `即時圖資載入失敗：${err.message || err}`;
       }
     }
 
     function startSatAutoRefresh() {
       if (satTimer) clearInterval(satTimer);
-      satTimer = setInterval(() => loadSatelliteImage(currentSatKey), 10 * 60 * 1000);
+      satTimer = setInterval(async () => {
+        await refreshLiveImage();
+        try {
+          await CWA.loadRainStations();
+          updateLiveRainPanel();
+          if (mapMode === "live") drawMap();
+        } catch (_) { /* ignore */ }
+      }, 5 * 60 * 1000);
+    }
+
+    function syncMapModeUi() {
+      document.getElementById("mapModePop").classList.toggle("active", mapMode === "pop");
+      document.getElementById("mapModeLive").classList.toggle("active", mapMode === "live");
+      document.getElementById("legendTitle").textContent = mapMode === "live" ? "近1小時雨量 (mm)" : "降雨機率 (%)";
+      document.getElementById("legendLo").textContent = mapMode === "live" ? "0" : "0";
+      document.getElementById("legendMid").textContent = mapMode === "live" ? "10" : "50";
+      document.getElementById("legendHi").textContent = mapMode === "live" ? "40+" : "100";
+      document.getElementById("legendBar").style.background = mapMode === "live"
+        ? "linear-gradient(to right, #1e3a5f, #22c55e, #eab308, #f97316, #ef4444)"
+        : "linear-gradient(to right, #1e3a5f, #00ffff, #00ff00, #ffff00, #ff8000, #ff0000, #b000ff)";
+    }
+
+    function liveRainColor(mm, selected) {
+      const a = selected ? 0.78 : 0.55;
+      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.35})`;
+      if (mm <= 2) return `rgba(56, 189, 248, ${a})`;
+      if (mm <= 5) return `rgba(34, 197, 94, ${a})`;
+      if (mm <= 10) return `rgba(234, 179, 8, ${a})`;
+      if (mm <= 20) return `rgba(249, 115, 22, ${a})`;
+      return `rgba(239, 68, 68, ${a})`;
+    }
+
+    function updateLiveRainPanel() {
+      const set = (id, v) => { document.getElementById(id).textContent = v; };
+      let lon = null, lat = null, county = "", town = "";
+      if (selectedTown) {
+        lon = selectedTown._c.lon; lat = selectedTown._c.lat;
+        county = selectedTown.properties.COUNTYNAME;
+        town = selectedTown.properties.TOWNNAME;
+      } else if (selectedCounty) {
+        lon = selectedCounty._c.lon; lat = selectedCounty._c.lat;
+        county = selectedCounty.properties.COUNTYNAME;
+      } else if (userPos) {
+        lon = userPos.lon; lat = userPos.lat;
+      }
+      if (lon == null || !CWA.cache.rainStations) {
+        set("liveStation", "—");
+        set("liveObsTime", "—");
+        set("liveRain10", "—");
+        set("liveRain1h", "—");
+        set("liveRain3h", "—");
+        set("liveRain24h", "—");
+        return;
+      }
+      const hit = CWA.nearestRain(lon, lat, county, town);
+      if (!hit) {
+        set("liveStation", "附近無測站");
+        set("liveObsTime", "—");
+        set("liveRain10", "—");
+        set("liveRain1h", "—");
+        set("liveRain3h", "—");
+        set("liveRain24h", "—");
+        return;
+      }
+      set("liveStation", `${hit.name}${hit.town ? "（" + hit.town + "）" : ""} · ${hit.distKm.toFixed(1)} km`);
+      set("liveObsTime", hit.obsTime ? new Date(hit.obsTime).toLocaleString("zh-TW") : "—");
+      set("liveRain10", `${hit.rain.m10} mm`);
+      set("liveRain1h", `${hit.rain.h1} mm`);
+      set("liveRain3h", `${hit.rain.h3} mm`);
+      set("liveRain24h", `${hit.rain.h24} mm`);
     }
 
     async function ensureCountyWeekly(countyName) {
@@ -946,6 +1053,7 @@
 
     function updateInfoPanel() {
       renderWeekStrip();
+      updateLiveRainPanel();
       const target = activeTarget();
       const badge = document.getElementById("alertBadge");
       const advice = document.getElementById("weatherAdvice");
@@ -1209,10 +1317,16 @@
       if (viewLevel === "county") {
         // 先畫填色／邊界
         for (const c of countyFC.features) {
-          const dataPop = popForCountyFeature(c, currentHour, currentDayOffset);
           const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
+          let fill;
+          if (mapMode === "live") {
+            const r = CWA.rainForCounty(c.properties.COUNTYNAME);
+            fill = liveRainColor(r ? r.max1h : 0, isSel);
+          } else {
+            fill = rainColor(popForCountyFeature(c, currentHour, currentDayOffset), isSel);
+          }
           drawGeom(mapCtx, c.geometry, w, h);
-          mapCtx.fillStyle = rainColor(dataPop, isSel);
+          mapCtx.fillStyle = fill;
           mapCtx.fill("evenodd");
           mapCtx.strokeStyle = isSel ? "#f59e0b" : "#64748b";
           mapCtx.lineWidth = isSel ? 2.2 : 1;
@@ -1243,10 +1357,16 @@
 
         const towns = townsByCounty[selectedCounty.properties.COUNTYNAME] || [];
         for (const t of towns) {
-          const dataPop = popForTownFeature(t, currentHour, currentDayOffset);
           const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
+          let fill;
+          if (mapMode === "live") {
+            const hit = CWA.nearestRain(t._c.lon, t._c.lat, t.properties.COUNTYNAME, t.properties.TOWNNAME);
+            fill = liveRainColor(hit ? hit.rain.h1 : 0, isSel);
+          } else {
+            fill = rainColor(popForTownFeature(t, currentHour, currentDayOffset), isSel);
+          }
           drawGeom(mapCtx, t.geometry, w, h);
-          mapCtx.fillStyle = rainColor(dataPop, isSel);
+          mapCtx.fillStyle = fill;
           mapCtx.fill("evenodd");
           mapCtx.strokeStyle = isSel ? "#f59e0b" : "rgba(148, 163, 184, 0.75)";
           mapCtx.lineWidth = isSel ? 2.4 : 0.9;
@@ -1605,11 +1725,21 @@
         const hit = hitTest(geo.lon, geo.lat);
         if (!hit) { hoverName = ""; return; }
         if (hit.type === "town") {
-          const pop = popForTownFeature(hit.feature, currentHour, currentDayOffset);
-          hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 降雨機率 ${pop}%`;
+          if (mapMode === "live") {
+            const r = CWA.nearestRain(hit.feature._c.lon, hit.feature._c.lat, hit.feature.properties.COUNTYNAME, hit.feature.properties.TOWNNAME);
+            hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 近1h ${r ? r.rain.h1 : 0} mm`;
+          } else {
+            const pop = popForTownFeature(hit.feature, currentHour, currentDayOffset);
+            hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 降雨機率 ${pop}%`;
+          }
         } else {
-          const pop = popForCountyFeature(hit.feature, currentHour, currentDayOffset);
-          hoverName = `${hit.feature.properties.COUNTYNAME} · 降雨機率 ${pop}%`;
+          if (mapMode === "live") {
+            const r = CWA.rainForCounty(hit.feature.properties.COUNTYNAME);
+            hoverName = `${hit.feature.properties.COUNTYNAME} · 近1h 最大 ${r ? r.max1h : 0} mm`;
+          } else {
+            const pop = popForCountyFeature(hit.feature, currentHour, currentDayOffset);
+            hoverName = `${hit.feature.properties.COUNTYNAME} · 降雨機率 ${pop}%`;
+          }
         }
         return;
       }
@@ -1734,7 +1864,32 @@
     document.title = "YijiaMango_Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => locateDevice(true));
     initSatTabs();
-    document.getElementById("satRefreshBtn").addEventListener("click", () => loadSatelliteImage(currentSatKey));
+    syncMapModeUi();
+    document.getElementById("satRefreshBtn").addEventListener("click", () => refreshLiveImage());
+    document.getElementById("liveModeRadar").addEventListener("click", () => {
+      liveLayer = "radar";
+      document.getElementById("liveModeRadar").classList.add("active");
+      document.getElementById("liveModeSat").classList.remove("active");
+      initSatTabs();
+      refreshLiveImage();
+    });
+    document.getElementById("liveModeSat").addEventListener("click", () => {
+      liveLayer = "sat";
+      document.getElementById("liveModeSat").classList.add("active");
+      document.getElementById("liveModeRadar").classList.remove("active");
+      initSatTabs();
+      refreshLiveImage();
+    });
+    document.getElementById("mapModePop").addEventListener("click", () => {
+      mapMode = "pop";
+      syncMapModeUi();
+      drawMap();
+    });
+    document.getElementById("mapModeLive").addEventListener("click", () => {
+      mapMode = "live";
+      syncMapModeUi();
+      drawMap();
+    });
     startSatAutoRefresh();
   </script>
 </body>

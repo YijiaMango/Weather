@@ -733,6 +733,13 @@
     globe_color: { id: "O-B0028-001", label: "全景·彩色" }
   };
 
+  // 雷達整合回波圖（約每 10 分鐘更新）— 對齊 NCDR 落雨小幫手的「即時感」
+  const RADAR_PRODUCTS = {
+    near: { id: "O-A0058-003", label: "鄰近·無地形" },
+    wide: { id: "O-A0058-001", label: "大範圍·無地形" },
+    terrain: { id: "O-A0058-002", label: "大範圍·有地形" }
+  };
+
   async function fetchFileApi(datasetId) {
     const url = new URL(`https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/${datasetId}`);
     url.searchParams.set("Authorization", getKey());
@@ -742,21 +749,19 @@
     return res.json();
   }
 
-  async function loadSatellite(productKey = "tw_color_hi") {
-    const prod = SAT_PRODUCTS[productKey] || SAT_PRODUCTS.tw_color_hi;
-    const json = await fetchFileApi(prod.id);
+  function parseImageProduct(json, fallbackLabel, datasetId, key) {
     const ds = json.cwaopendata?.dataset || json.dataset || {};
     const resource = ds.Resource || ds.resource || {};
     const geo = ds.GeoInfo || ds.geoInfo || {};
-    const obs = ds.ObsTime?.Datetime || ds.ObsTime?.DateTime || "";
-    const imageUrl = resource.ProductURL || resource.productURL || "";
-    if (!imageUrl) throw new Error("NO_SAT_URL");
+    const obs = ds.ObsTime?.Datetime || ds.ObsTime?.DateTime || json.cwaopendata?.sent || "";
+    const imageUrl = resource.ProductURL || resource.productURL || resource.uri || resource.URI || "";
+    if (!imageUrl) throw new Error("NO_IMAGE_URL");
     const bust = `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
-    const pack = {
-      key: productKey,
-      dataset: prod.id,
-      label: prod.label,
-      desc: resource.ResourceDesc || resource.resourceDesc || prod.label,
+    return {
+      key,
+      dataset: datasetId,
+      label: fallbackLabel,
+      desc: resource.ResourceDesc || resource.resourceDesc || fallbackLabel,
       obsTime: obs,
       imageUrl: bust,
       rawUrl: imageUrl,
@@ -764,8 +769,115 @@
       latRange: geo.LatitudeRange || "",
       at: new Date().toISOString()
     };
+  }
+
+  async function loadSatellite(productKey = "tw_color_hi") {
+    const prod = SAT_PRODUCTS[productKey] || SAT_PRODUCTS.tw_color_hi;
+    const json = await fetchFileApi(prod.id);
+    const pack = parseImageProduct(json, prod.label, prod.id, productKey);
     cache.satellite = pack;
     return pack;
+  }
+
+  async function loadRadar(productKey = "near") {
+    const prod = RADAR_PRODUCTS[productKey] || RADAR_PRODUCTS.near;
+    const json = await fetchFileApi(prod.id);
+    const pack = parseImageProduct(json, prod.label, prod.id, productKey);
+    cache.radar = pack;
+    return pack;
+  }
+
+  function stationCoords(st) {
+    const list = st.GeoInfo?.Coordinates || [];
+    const wgs = list.find((c) => c.CoordinateName === "WGS84") || list[0];
+    if (!wgs) return null;
+    return {
+      lon: parseFloat(wgs.StationLongitude),
+      lat: parseFloat(wgs.StationLatitude)
+    };
+  }
+
+  function rainNums(st) {
+    const e = st.RainfallElement || {};
+    const n = (obj) => {
+      const v = parseFloat(obj?.Precipitation);
+      return Number.isFinite(v) && v >= 0 ? v : 0;
+    };
+    return {
+      now: n(e.Now),
+      m10: n(e.Past10Min),
+      h1: n(e.Past1hr),
+      h3: n(e.Past3hr),
+      h6: n(e.Past6Hr || e.Past6hr),
+      h12: n(e.Past12hr),
+      h24: n(e.Past24hr)
+    };
+  }
+
+  async function loadRainStations() {
+    const json = await fetchDatastore("O-A0002-001");
+    const stations = json.records?.Station || json.records?.station || [];
+    const list = [];
+    for (const st of stations) {
+      const c = stationCoords(st);
+      if (!c || Number.isNaN(c.lon) || Number.isNaN(c.lat)) continue;
+      const rain = rainNums(st);
+      list.push({
+        id: st.StationId,
+        name: st.StationName,
+        county: normName(st.GeoInfo?.CountyName || ""),
+        town: normName(st.GeoInfo?.TownName || ""),
+        lon: c.lon,
+        lat: c.lat,
+        obsTime: st.ObsTime?.DateTime || st.ObsTime?.Datetime || "",
+        rain
+      });
+    }
+    cache.rainStations = { list, at: new Date().toISOString() };
+    return cache.rainStations;
+  }
+
+  function nearestRain(lon, lat, countyName, townName) {
+    const list = cache.rainStations?.list || [];
+    if (!list.length) return null;
+    const cName = normName(countyName);
+    const tName = normName(townName);
+    let pool = list;
+    if (cName && tName) {
+      const sameTown = list.filter((s) => s.county === cName && (s.town === tName || s.town.includes(tName) || tName.includes(s.town)));
+      if (sameTown.length) pool = sameTown;
+      else {
+        const sameCounty = list.filter((s) => s.county === cName);
+        if (sameCounty.length) pool = sameCounty;
+      }
+    } else if (cName) {
+      const sameCounty = list.filter((s) => s.county === cName);
+      if (sameCounty.length) pool = sameCounty;
+    }
+    let best = null;
+    let bestD = Infinity;
+    for (const s of pool) {
+      const d = Math.hypot(s.lon - lon, s.lat - lat);
+      if (d < bestD) {
+        bestD = d;
+        best = s;
+      }
+    }
+    return best ? { ...best, distKm: bestD * 111 } : null;
+  }
+
+  function rainForCounty(countyName) {
+    const list = (cache.rainStations?.list || []).filter((s) => s.county === normName(countyName));
+    if (!list.length) return null;
+    let max1 = 0;
+    let max10 = 0;
+    let sum1 = 0;
+    for (const s of list) {
+      max1 = Math.max(max1, s.rain.h1);
+      max10 = Math.max(max10, s.rain.m10);
+      sum1 += s.rain.h1;
+    }
+    return { max1h: max1, max10m: max10, avg1h: sum1 / list.length, count: list.length };
   }
 
   global.CWA = {
@@ -787,11 +899,16 @@
     dayOutlook,
     dayOutlookFromPack,
     loadSatellite,
+    loadRadar,
+    loadRainStations,
+    nearestRain,
+    rainForCounty,
     todayKey,
     addDaysKey,
     hourOf,
     COUNTY_WEEKLY,
     COUNTY_3DAY,
-    SAT_PRODUCTS
+    SAT_PRODUCTS,
+    RADAR_PRODUCTS
   };
 })(window);
