@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>落雨小幫手 - 台灣鄉鎮降雨雷達</title>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="./weather-data/tw-topo.js"></script>
+  <style>
+    :root {
+      --bg-main: #0b132b;
+      --bg-card: #1c2541;
+      --accent: #3a86ff;
+      --accent-gold: #f59e0b;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border: #334155;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+    }
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card);
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    select, button {
+      background: #0f172a;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    select:hover, button:hover { border-color: var(--accent); }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .breadcrumb {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .breadcrumb button.linkish {
+      background: none;
+      border: none;
+      color: #38bdf8;
+      padding: 0;
+      font-size: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .breadcrumb .here { color: var(--text-main); font-weight: 600; }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+    }
+    @media (max-width: 820px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+    .canvas-container {
+      position: relative;
+      background: #080d1a;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      aspect-ratio: 4 / 5;
+      max-height: 560px;
+    }
+    canvas#mapCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    canvas#mapCanvas.is-dragging { cursor: grabbing; }
+    .canvas-overlay-time {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      border: 1px solid var(--border);
+    }
+    .legend {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border: 1px solid var(--border);
+    }
+    .legend-bar {
+      width: 120px;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #1e3a5f, #00ffff, #00ff00, #ffff00, #ff8000, #ff0000, #b000ff);
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-sub);
+    }
+    .info-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .location-name {
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #38bdf8;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .metric-box {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .metric-label { font-size: 0.75rem; color: var(--text-sub); }
+    .metric-value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: bold;
+    }
+    .badge-none { background: #064e3b; color: #34d399; }
+    .badge-low { background: #1e3a8a; color: #60a5fa; }
+    .badge-mid { background: #78350f; color: #fbbf24; }
+    .badge-high { background: #7f1d1d; color: #f87171; }
+    .timeline-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .time-slider-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    canvas#chartCanvas {
+      width: 100%;
+      height: 140px;
+      display: block;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      justify-content: flex-end;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .hint { font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div class="top-bar">
+      <div>
+        <div class="brand-title"><span>🌧️</span> 台灣降雨小幫手</div>
+        <div class="breadcrumb" id="breadcrumb" style="margin-top:6px;"></div>
+      </div>
+      <div class="controls-group">
+        <select id="citySelect">
+          <option value="">選擇縣市</option>
+        </select>
+        <select id="townSelect" disabled>
+          <option value="">選擇鄉鎮市區</option>
+        </select>
+        <button id="backBtn" disabled>上一層</button>
+        <button id="locateBtn" title="重新定位">📍 我的位置</button>
+        <button id="resetBtn">全台總覽</button>
+        <button id="playBtn" class="primary">▶ 播放預報</button>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="canvas-container" id="canvasWrapper">
+        <canvas id="mapCanvas"></canvas>
+        <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
+        <div class="legend">
+          <span>預估時雨量 (mm/h)</span>
+          <div class="legend-bar"></div>
+          <div class="legend-labels">
+            <span>0</span><span>8</span><span>20+</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-panel">
+        <div class="card">
+          <div class="card-title">
+            <span>選取地點</span>
+            <span id="alertBadge" class="badge badge-none">無降雨</span>
+          </div>
+          <div class="location-name" id="locName">全台總覽</div>
+          <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 2px;" id="coordsText">點擊縣市進入鄉鎮細分</div>
+          <div class="metric-grid">
+            <div class="metric-box">
+              <div class="metric-label">雷達回波值</div>
+              <div class="metric-value" id="valDbz">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">預估時雨量</div>
+              <div class="metric-value" id="valRain">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">當前降雨機率</div>
+              <div class="metric-value" id="valPop">—</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">對流警戒狀態</div>
+              <div class="metric-value" id="valConvect" style="font-size: 0.95rem;">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="flex: 1;">
+          <div class="card-title">即時觀測提示</div>
+          <div style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;" id="weatherAdvice">
+            地圖為真實行政區界。點擊縣市後會放大並細分到鄉鎮市區，再點鄉鎮可看該區降雨。
+          </div>
+          <div class="hint" id="levelHint">目前層級：縣市總覽</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: 600; font-size: 0.95rem;">24 小時逐時降雨與機率預報</span>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:#38bdf8;"></span>降雨量 (mm/h)</span>
+          <span><span class="dot" style="background:#34d399;"></span>降雨機率 (%)</span>
+        </div>
+      </div>
+      <div class="time-slider-wrapper">
+        <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
+        <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
+        <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
+      </div>
+      <canvas id="chartCanvas"></canvas>
+    </div>
+  </div>
+
+  <script>
+    if (!window.TW_TOPO || !window.topojson) {
+      document.body.innerHTML = "<p style='padding:40px;color:#fff;font-family:sans-serif'>無法載入地圖資料。請確認同目錄有 <code>weather-data/tw-topo.js</code>，且可連線載入 topojson-client。</p>";
+      throw new Error("missing map data");
+    }
+
+    const countyFC = topojson.feature(TW_TOPO, TW_TOPO.objects.counties);
+    const townFC = topojson.feature(TW_TOPO, TW_TOPO.objects.towns);
+
+    // 預計算 bbox / 質心
+    function ringBBox(ring, box) {
+      for (const [x, y] of ring) {
+        if (x < box[0]) box[0] = x;
+        if (y < box[1]) box[1] = y;
+        if (x > box[2]) box[2] = x;
+        if (y > box[3]) box[3] = y;
+      }
+    }
+    function geomBBox(geom) {
+      const box = [Infinity, Infinity, -Infinity, -Infinity];
+      const polys = geom.type === "Polygon" ? [geom.coordinates]
+        : geom.type === "MultiPolygon" ? geom.coordinates : [];
+      for (const poly of polys) for (const ring of poly) ringBBox(ring, box);
+      return box;
+    }
+    function bboxCenter(b) {
+      return { lon: (b[0] + b[2]) / 2, lat: (b[1] + b[3]) / 2 };
+    }
+    function enrich(features) {
+      for (const f of features) {
+        f._bbox = geomBBox(f.geometry);
+        f._c = bboxCenter(f._bbox);
+      }
+    }
+    enrich(countyFC.features);
+    enrich(townFC.features);
+
+    const townsByCounty = {};
+    for (const t of townFC.features) {
+      const name = t.properties.COUNTYNAME;
+      (townsByCounty[name] ||= []).push(t);
+    }
+    for (const list of Object.values(townsByCounty)) {
+      list.sort((a, b) => a.properties.TOWNNAME.localeCompare(b.properties.TOWNNAME, "zh-Hant"));
+    }
+
+    const OFFSHORE = new Set(["金門縣", "連江縣", "澎湖縣"]);
+    const MAINLAND_VIEW = { lon: 120.97, lat: 23.72, span: 3.55 };
+
+    // 狀態
+    let viewLevel = "county"; // county | town
+    let selectedCounty = null; // Feature
+    let selectedTown = null;   // Feature
+    let currentHour = new Date().getHours();
+    let isPlaying = false;
+    let playInterval = null;
+    let hoverName = "";
+    let userPos = null; // { lon, lat, accuracy }
+    let locating = false;
+
+    const camera = {
+      lon: MAINLAND_VIEW.lon,
+      lat: MAINLAND_VIEW.lat,
+      span: MAINLAND_VIEW.span,
+      targetLon: MAINLAND_VIEW.lon,
+      targetLat: MAINLAND_VIEW.lat,
+      targetSpan: MAINLAND_VIEW.span
+    };
+
+    const citySelect = document.getElementById("citySelect");
+    const townSelect = document.getElementById("townSelect");
+    const playBtn = document.getElementById("playBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const backBtn = document.getElementById("backBtn");
+    const locateBtn = document.getElementById("locateBtn");
+    const timeSlider = document.getElementById("timeSlider");
+    const timeOverlay = document.getElementById("timeOverlay");
+    timeSlider.value = currentHour;
+    timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+    const mapCanvas = document.getElementById("mapCanvas");
+    const chartCanvas = document.getElementById("chartCanvas");
+    const mapCtx = mapCanvas.getContext("2d");
+    const chartCtx = chartCanvas.getContext("2d");
+
+    // 縣市選單（本島優先）
+    const countyNames = countyFC.features
+      .map(f => f.properties.COUNTYNAME)
+      .sort((a, b) => {
+        const ao = OFFSHORE.has(a) ? 1 : 0;
+        const bo = OFFSHORE.has(b) ? 1 : 0;
+        if (ao !== bo) return ao - bo;
+        return a.localeCompare(b, "zh-Hant");
+      });
+    for (const name of countyNames) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      citySelect.appendChild(opt);
+    }
+
+    function hashStr(s) {
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    }
+
+    function unitRainSeed(id, lat) {
+      const h = hashStr(id);
+      const base = 0.4 + (h % 1000) / 450;
+      const eastBoost = lat > 24.2 && (h % 7) > 3 ? 1.4 : 1.0;
+      const mountain = (h % 5 === 0) ? 1.35 : 1.0;
+      return base * eastBoost * mountain;
+    }
+
+    function calcRainForSeed(seed, lat, hour) {
+      const afternoonPeak = Math.exp(-Math.pow(hour - 15, 2) / 8) * 14.0;
+      const wave = Math.sin(hour / 3.0 + lat + seed) * 2.2;
+      const amount = Math.max(0, seed * 1.6 + afternoonPeak * (lat < 24.5 ? 1.25 : 0.85) + wave);
+      const pop = Math.min(95, Math.round((amount / 18) * 80 + 12));
+      const dbz = Math.min(65, Math.round(amount * 3.2 + 8));
+      return { rain: Number(amount.toFixed(1)), pop, dbz };
+    }
+
+    function rainForTown(town, hour) {
+      const p = town.properties;
+      const seed = unitRainSeed(p.TOWNCODE || p.TOWNID, town._c.lat);
+      return calcRainForSeed(seed, town._c.lat, hour);
+    }
+
+    function rainForCounty(county, hour) {
+      const towns = townsByCounty[county.properties.COUNTYNAME] || [];
+      if (!towns.length) return { rain: 0, pop: 0, dbz: 0 };
+      let rain = 0, pop = 0, dbz = 0;
+      for (const t of towns) {
+        const d = rainForTown(t, hour);
+        rain += d.rain; pop += d.pop; dbz += d.dbz;
+      }
+      const n = towns.length;
+      return {
+        rain: Number((rain / n).toFixed(1)),
+        pop: Math.round(pop / n),
+        dbz: Math.round(dbz / n)
+      };
+    }
+
+    function activeTarget() {
+      if (selectedTown) return { kind: "town", feature: selectedTown, data: rainForTown(selectedTown, currentHour) };
+      if (selectedCounty) return { kind: "county", feature: selectedCounty, data: rainForCounty(selectedCounty, currentHour) };
+      return null;
+    }
+
+    function rainColor(rain, selected) {
+      const a = selected ? 0.78 : 0.55;
+      if (rain <= 0.3) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.35})`;
+      if (rain <= 2) return `rgba(56, 189, 248, ${a})`;
+      if (rain <= 5) return `rgba(34, 197, 94, ${a})`;
+      if (rain <= 10) return `rgba(234, 179, 8, ${a})`;
+      if (rain <= 15) return `rgba(249, 115, 22, ${a})`;
+      return `rgba(239, 68, 68, ${a})`;
+    }
+
+    function fitToBBox(b, pad = 1.18) {
+      const w = Math.max(0.08, b[2] - b[0]);
+      const h = Math.max(0.08, b[3] - b[1]);
+      camera.targetLon = (b[0] + b[2]) / 2;
+      camera.targetLat = (b[1] + b[3]) / 2;
+      camera.targetSpan = Math.max(w / 0.72, h / 0.72) * pad;
+    }
+
+    function project(lon, lat, width, height) {
+      const span = camera.span;
+      const x = width / 2 + ((lon - camera.lon) / span) * (width * 0.9);
+      const y = height / 2 - ((lat - camera.lat) / span) * (height * 0.9);
+      return { x, y };
+    }
+
+    function unproject(x, y, width, height) {
+      const span = camera.span;
+      const lon = camera.lon + ((x - width / 2) / (width * 0.9)) * span;
+      const lat = camera.lat - ((y - height / 2) / (height * 0.9)) * span;
+      return { lon, lat };
+    }
+
+    function pointInRing(lon, lat, ring) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0], yi = ring[i][1];
+        const xj = ring[j][0], yj = ring[j][1];
+        const intersect = ((yi > lat) !== (yj > lat)) &&
+          (lon < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function pointInFeature(lon, lat, f) {
+      const g = f.geometry;
+      const polys = g.type === "Polygon" ? [g.coordinates]
+        : g.type === "MultiPolygon" ? g.coordinates : [];
+      for (const poly of polys) {
+        if (!pointInRing(lon, lat, poly[0])) continue;
+        let inHole = false;
+        for (let r = 1; r < poly.length; r++) {
+          if (pointInRing(lon, lat, poly[r])) { inHole = true; break; }
+        }
+        if (!inHole) return true;
+      }
+      return false;
+    }
+
+    function drawGeom(ctx, geom, w, h) {
+      const polys = geom.type === "Polygon" ? [geom.coordinates]
+        : geom.type === "MultiPolygon" ? geom.coordinates : [];
+      ctx.beginPath();
+      for (const poly of polys) {
+        for (let r = 0; r < poly.length; r++) {
+          const ring = poly[r];
+          for (let i = 0; i < ring.length; i++) {
+            const p = project(ring[i][0], ring[i][1], w, h);
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.closePath();
+        }
+      }
+    }
+
+    function updateTownSelect(countyName) {
+      townSelect.innerHTML = '<option value="">選擇鄉鎮市區</option>';
+      if (!countyName) {
+        townSelect.disabled = true;
+        return;
+      }
+      townSelect.disabled = false;
+      for (const t of (townsByCounty[countyName] || [])) {
+        const opt = document.createElement("option");
+        opt.value = t.properties.TOWNCODE;
+        opt.textContent = t.properties.TOWNNAME;
+        townSelect.appendChild(opt);
+      }
+    }
+
+    function updateBreadcrumb() {
+      const el = document.getElementById("breadcrumb");
+      const parts = [];
+      parts.push(`<button type="button" class="linkish" data-nav="root">全台</button>`);
+      if (selectedCounty) {
+        parts.push("<span>›</span>");
+        if (selectedTown) {
+          parts.push(`<button type="button" class="linkish" data-nav="county">${selectedCounty.properties.COUNTYNAME}</button>`);
+          parts.push("<span>›</span>");
+          parts.push(`<span class="here">${selectedTown.properties.TOWNNAME}</span>`);
+        } else {
+          parts.push(`<span class="here">${selectedCounty.properties.COUNTYNAME}</span>`);
+        }
+      } else {
+        parts.push("<span>›</span><span class=\"here\">縣市總覽</span>");
+      }
+      el.innerHTML = parts.join(" ");
+      el.querySelectorAll("button[data-nav]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (btn.dataset.nav === "root") resetOverview();
+          else if (btn.dataset.nav === "county" && selectedCounty) enterCounty(selectedCounty, false);
+        });
+      });
+    }
+
+    function updateInfoPanel() {
+      const target = activeTarget();
+      const badge = document.getElementById("alertBadge");
+      const convect = document.getElementById("valConvect");
+      const advice = document.getElementById("weatherAdvice");
+      const hint = document.getElementById("levelHint");
+
+      backBtn.disabled = viewLevel === "county" && !selectedCounty;
+      updateBreadcrumb();
+
+      if (!target) {
+        document.getElementById("locName").textContent = "全台總覽";
+        document.getElementById("coordsText").textContent = "點擊縣市進入鄉鎮細分";
+        document.getElementById("valDbz").textContent = "—";
+        document.getElementById("valRain").textContent = "—";
+        document.getElementById("valPop").textContent = "—";
+        convect.textContent = "—";
+        badge.className = "badge badge-none";
+        badge.textContent = "請選取";
+        advice.textContent = "點擊地圖上的縣市，或用上方選單切換。進入縣市後會顯示真實鄉鎮市區界線與分區降雨。";
+        hint.textContent = "目前層級：縣市總覽";
+        return;
+      }
+
+      const f = target.feature;
+      const data = target.data;
+      const name = target.kind === "town"
+        ? `${f.properties.COUNTYNAME} ${f.properties.TOWNNAME}`
+        : f.properties.COUNTYNAME;
+
+      document.getElementById("locName").textContent = name;
+      if (userPos) {
+        const acc = userPos.accuracy ? ` · 精度約 ${Math.round(userPos.accuracy)} m` : "";
+        document.getElementById("coordsText").textContent =
+          `裝置位置 北緯 ${userPos.lat.toFixed(4)}° / 東經 ${userPos.lon.toFixed(4)}°${acc}` +
+          (target.kind === "town" ? ` · ${f.properties.TOWNNAME}` : "");
+      } else {
+        document.getElementById("coordsText").textContent =
+          `北緯 ${f._c.lat.toFixed(3)}° / 東經 ${f._c.lon.toFixed(3)}°` +
+          (target.kind === "county" ? ` · ${ (townsByCounty[f.properties.COUNTYNAME] || []).length } 個鄉鎮市區` : "");
+      }
+      document.getElementById("valDbz").textContent = `${data.dbz} dBZ`;
+      document.getElementById("valRain").textContent = `${data.rain} mm/h`;
+      document.getElementById("valPop").textContent = `${data.pop} %`;
+      hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區" : "目前層級：縣市（已細分鄉鎮，可再點選）";
+
+      if (data.rain > 15) {
+        badge.className = "badge badge-high";
+        badge.textContent = "豪雨特報";
+        convect.textContent = "強對流胞發展";
+        advice.textContent = `【降雨警特報】${name} 時雨量達 ${data.rain} mm，請嚴防低窪積淹水與雷擊！`;
+      } else if (data.rain > 5) {
+        badge.className = "badge badge-mid";
+        badge.textContent = "大雨特報";
+        convect.textContent = "午後熱對流";
+        advice.textContent = `【大雨提示】${name} 雷達回波增強中，外出請攜帶雨具。`;
+      } else if (data.rain > 0.5) {
+        badge.className = "badge badge-low";
+        badge.textContent = "局部有雨";
+        convect.textContent = "微弱回波";
+        advice.textContent = `【短暫陣雨】${name} 上空有微弱雲系通過，伴隨零星短暫飄雨。`;
+      } else {
+        badge.className = "badge badge-none";
+        badge.textContent = "無降雨";
+        convect.textContent = "大氣穩定";
+        advice.textContent = `【氣候穩定】${name} 當前無顯著回波，降雨機率低。`;
+      }
+    }
+
+    function enterCounty(countyFeature, fit = true) {
+      selectedCounty = countyFeature;
+      selectedTown = null;
+      viewLevel = "town";
+      citySelect.value = countyFeature.properties.COUNTYNAME;
+      updateTownSelect(countyFeature.properties.COUNTYNAME);
+      townSelect.value = "";
+      if (fit) fitToBBox(countyFeature._bbox, OFFSHORE.has(countyFeature.properties.COUNTYNAME) ? 1.35 : 1.15);
+      updateInfoPanel();
+      drawChart();
+    }
+
+    function selectTown(townFeature, opts = {}) {
+      const fitTown = opts.fitTown === true;
+      const keepView = opts.keepView === true;
+      selectedTown = townFeature;
+      selectedCounty = countyFC.features.find(c => c.properties.COUNTYNAME === townFeature.properties.COUNTYNAME) || selectedCounty;
+      viewLevel = "town";
+      citySelect.value = townFeature.properties.COUNTYNAME;
+      updateTownSelect(townFeature.properties.COUNTYNAME);
+      townSelect.value = townFeature.properties.TOWNCODE;
+      if (!keepView) {
+        if (fitTown) {
+          const b = townFeature._bbox;
+          const padLon = Math.max((b[2] - b[0]) * 1.6, 0.06);
+          const padLat = Math.max((b[3] - b[1]) * 1.6, 0.06);
+          fitToBBox([b[0] - padLon, b[1] - padLat, b[2] + padLon, b[3] + padLat], 1.05);
+        } else {
+          fitToBBox(selectedCounty._bbox, 1.12);
+        }
+      }
+      updateInfoPanel();
+      drawChart();
+    }
+
+    function findTownAt(lon, lat) {
+      // 先找包含點的鄉鎮
+      for (const t of townFC.features) {
+        const b = t._bbox;
+        if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) continue;
+        if (pointInFeature(lon, lat, t)) return t;
+      }
+      // 否則最近質心（台灣外緣 / GPS 誤差用）
+      let best = null;
+      let bestD = Infinity;
+      for (const t of townFC.features) {
+        const d = Math.hypot(t._c.lon - lon, t._c.lat - lat);
+        if (d < bestD) { bestD = d; best = t; }
+      }
+      // 超過 ~80km 視為不在台灣
+      if (bestD > 0.8) return null;
+      return best;
+    }
+
+    function applyUserLocation(lon, lat, accuracy) {
+      userPos = { lon, lat, accuracy: accuracy || 0 };
+      const town = findTownAt(lon, lat);
+      if (!town) {
+        document.getElementById("weatherAdvice").textContent =
+          `已取得定位（北緯 ${lat.toFixed(4)}° / 東經 ${lon.toFixed(4)}°），但似乎不在台灣行政區範圍內，維持全台總覽。`;
+        document.getElementById("levelHint").textContent = "定位：台灣境外";
+        return;
+      }
+      selectTown(town, { fitTown: true });
+      const acc = accuracy ? ` · 精度約 ${Math.round(accuracy)} m` : "";
+      document.getElementById("coordsText").textContent =
+        `裝置位置 北緯 ${lat.toFixed(4)}° / 東經 ${lon.toFixed(4)}°${acc}`;
+      document.getElementById("levelHint").textContent =
+        `目前層級：依裝置定位 → ${town.properties.COUNTYNAME} ${town.properties.TOWNNAME}`;
+    }
+
+    function locateDevice(isAuto = false) {
+      if (!navigator.geolocation) {
+        document.getElementById("weatherAdvice").textContent =
+          "此瀏覽器不支援定位。請改用選單或點擊地圖選擇鄉鎮。";
+        return;
+      }
+      if (locating) return;
+      locating = true;
+      locateBtn.disabled = true;
+      locateBtn.textContent = "定位中…";
+      if (isAuto) {
+        document.getElementById("weatherAdvice").textContent = "正在取得裝置位置…";
+        document.getElementById("levelHint").textContent = "定位中";
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          locating = false;
+          locateBtn.disabled = false;
+          locateBtn.textContent = "📍 我的位置";
+          applyUserLocation(pos.coords.longitude, pos.coords.latitude, pos.coords.accuracy);
+        },
+        err => {
+          locating = false;
+          locateBtn.disabled = false;
+          locateBtn.textContent = "📍 我的位置";
+          const msg = err.code === 1
+            ? "你拒絕了定位權限。可點「我的位置」再試，或手動選縣市／鄉鎮。"
+            : err.code === 2
+              ? "無法取得位置（訊號或裝置問題）。請手動選縣市／鄉鎮。"
+              : "定位逾時。請再試一次或手動選縣市／鄉鎮。";
+          document.getElementById("weatherAdvice").textContent = msg;
+          document.getElementById("levelHint").textContent = isAuto ? "定位失敗，顯示全台總覽" : "定位失敗";
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+      );
+    }
+
+    function resetOverview() {
+      viewLevel = "county";
+      selectedCounty = null;
+      selectedTown = null;
+      citySelect.value = "";
+      updateTownSelect(null);
+      camera.targetLon = MAINLAND_VIEW.lon;
+      camera.targetLat = MAINLAND_VIEW.lat;
+      camera.targetSpan = MAINLAND_VIEW.span;
+      updateInfoPanel();
+      drawChart();
+    }
+
+    function goBack() {
+      if (selectedTown) {
+        enterCounty(selectedCounty, true);
+      } else if (selectedCounty) {
+        resetOverview();
+      }
+    }
+
+    function drawMap() {
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      mapCtx.clearRect(0, 0, w, h);
+
+      // 拖曳時不 lerp，避免跟手感打架
+      if (!mapDrag.active) {
+        camera.lon += (camera.targetLon - camera.lon) * 0.12;
+        camera.lat += (camera.targetLat - camera.lat) * 0.12;
+        camera.span += (camera.targetSpan - camera.span) * 0.12;
+      } else {
+        camera.targetLon = camera.lon;
+        camera.targetLat = camera.lat;
+        camera.targetSpan = camera.span;
+      }
+
+      if (viewLevel === "county") {
+        for (const c of countyFC.features) {
+          const data = rainForCounty(c, currentHour);
+          const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
+          drawGeom(mapCtx, c.geometry, w, h);
+          mapCtx.fillStyle = rainColor(data.rain, isSel);
+          mapCtx.fill("evenodd");
+          mapCtx.strokeStyle = isSel ? "#f59e0b" : "#64748b";
+          mapCtx.lineWidth = isSel ? 2.2 : 1;
+          mapCtx.stroke();
+
+          // 縣市名（離島與本島都標）
+          const p = project(c._c.lon, c._c.lat, w, h);
+          if (p.x > -40 && p.x < w + 40 && p.y > -20 && p.y < h + 20) {
+            mapCtx.fillStyle = isSel ? "#fbbf24" : "#e2e8f0";
+            mapCtx.font = `${isSel ? "bold 12px" : "11px"} sans-serif`;
+            mapCtx.textAlign = "center";
+            mapCtx.fillText(c.properties.COUNTYNAME, p.x, p.y);
+          }
+        }
+      } else if (selectedCounty) {
+        const viewBox = (() => {
+          const tl = unproject(0, 0, w, h);
+          const br = unproject(w, h, w, h);
+          return [
+            Math.min(tl.lon, br.lon),
+            Math.min(br.lat, tl.lat),
+            Math.max(tl.lon, br.lon),
+            Math.max(br.lat, tl.lat)
+          ];
+        })();
+        const inView = (b) => !(b[2] < viewBox[0] || b[0] > viewBox[2] || b[3] < viewBox[1] || b[1] > viewBox[3]);
+        const showAllTowns = camera.span < 1.35;
+
+        // 其他縣市底圖
+        for (const c of countyFC.features) {
+          if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
+          if (!inView(c._bbox)) continue;
+          drawGeom(mapCtx, c.geometry, w, h);
+          if (showAllTowns) {
+            mapCtx.fillStyle = "rgba(15, 23, 42, 0.25)";
+          } else {
+            mapCtx.fillStyle = "rgba(15, 23, 42, 0.55)";
+          }
+          mapCtx.fill("evenodd");
+          mapCtx.strokeStyle = "#334155";
+          mapCtx.lineWidth = 0.6;
+          mapCtx.stroke();
+        }
+
+        // 視野內鄉鎮（縮放夠近時畫全部，否則只畫當前縣市）
+        const townsToDraw = showAllTowns
+          ? townFC.features.filter(t => inView(t._bbox))
+          : (townsByCounty[selectedCounty.properties.COUNTYNAME] || []);
+
+        for (const t of townsToDraw) {
+          const data = rainForTown(t, currentHour);
+          const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
+          const inFocusCounty = t.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME;
+          drawGeom(mapCtx, t.geometry, w, h);
+          mapCtx.fillStyle = rainColor(data.rain, isSel);
+          if (!inFocusCounty && !isSel) {
+            // 略淡一點表示非焦點縣
+            mapCtx.globalAlpha = 0.72;
+          }
+          mapCtx.fill("evenodd");
+          mapCtx.globalAlpha = 1;
+          mapCtx.strokeStyle = isSel ? "#f59e0b" : "rgba(148, 163, 184, 0.75)";
+          mapCtx.lineWidth = isSel ? 2.4 : 0.9;
+          mapCtx.stroke();
+        }
+
+        for (const t of townsToDraw) {
+          const b = t._bbox;
+          const area = (b[2] - b[0]) * (b[3] - b[1]);
+          const isSel = selectedTown && selectedTown.properties.TOWNCODE === t.properties.TOWNCODE;
+          if (!isSel && area < 0.0025 && townsToDraw.length > 20) continue;
+          const p = project(t._c.lon, t._c.lat, w, h);
+          if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+          mapCtx.fillStyle = isSel ? "#fbbf24" : "#f1f5f9";
+          mapCtx.font = `${isSel ? "bold 11px" : "10px"} sans-serif`;
+          mapCtx.textAlign = "center";
+          mapCtx.fillText(t.properties.TOWNNAME, p.x, p.y);
+        }
+
+        // 焦點縣市外框
+        drawGeom(mapCtx, selectedCounty.geometry, w, h);
+        mapCtx.strokeStyle = "#f59e0b";
+        mapCtx.lineWidth = 2;
+        mapCtx.stroke();
+      }
+
+      if (hoverName) {
+        mapCtx.fillStyle = "rgba(15, 23, 42, 0.9)";
+        mapCtx.fillRect(12, h - 36, mapCtx.measureText(hoverName).width + 24, 24);
+        mapCtx.fillStyle = "#e2e8f0";
+        mapCtx.font = "12px sans-serif";
+        mapCtx.textAlign = "left";
+        mapCtx.fillText(hoverName, 22, h - 20);
+      }
+
+      // 裝置定位標記
+      if (userPos) {
+        const p = project(userPos.lon, userPos.lat, w, h);
+        if (p.x > -20 && p.x < w + 20 && p.y > -20 && p.y < h + 20) {
+          const pulse = 10 + Math.sin(performance.now() / 280) * 3;
+          mapCtx.beginPath();
+          mapCtx.arc(p.x, p.y, pulse, 0, Math.PI * 2);
+          mapCtx.fillStyle = "rgba(56, 189, 248, 0.25)";
+          mapCtx.fill();
+          mapCtx.beginPath();
+          mapCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+          mapCtx.fillStyle = "#38bdf8";
+          mapCtx.fill();
+          mapCtx.strokeStyle = "#fff";
+          mapCtx.lineWidth = 2;
+          mapCtx.stroke();
+        }
+      }
+
+      requestAnimationFrame(drawMap);
+    }
+
+    function drawChart() {
+      const w = chartCanvas.width;
+      const h = chartCanvas.height;
+      chartCtx.clearRect(0, 0, w, h);
+
+      const paddingLeft = 35;
+      const paddingBottom = 25;
+      const chartW = w - paddingLeft - 10;
+      const chartH = h - paddingBottom - 10;
+
+      const hourlyData = [];
+      for (let hr = 0; hr < 24; hr++) {
+        if (selectedTown) hourlyData.push(rainForTown(selectedTown, hr));
+        else if (selectedCounty) hourlyData.push(rainForCounty(selectedCounty, hr));
+        else hourlyData.push({ rain: 0, pop: 0, dbz: 0 });
+      }
+
+      const barWidth = (chartW / 24) * 0.65;
+      const slotWidth = chartW / 24;
+
+      chartCtx.strokeStyle = "#334155";
+      chartCtx.lineWidth = 0.5;
+      for (let i = 0; i <= 3; i++) {
+        const y = 10 + (chartH / 3) * i;
+        chartCtx.beginPath();
+        chartCtx.moveTo(paddingLeft, y);
+        chartCtx.lineTo(w - 10, y);
+        chartCtx.stroke();
+      }
+
+      if (!selectedCounty && !selectedTown) {
+        chartCtx.fillStyle = "#64748b";
+        chartCtx.font = "13px sans-serif";
+        chartCtx.textAlign = "center";
+        chartCtx.fillText("選取縣市或鄉鎮後顯示 24 小時預報", w / 2, h / 2);
+        return;
+      }
+
+      hourlyData.forEach((d, hr) => {
+        const barH = Math.min(chartH, (d.rain / 20) * chartH);
+        const x = paddingLeft + hr * slotWidth + (slotWidth - barWidth) / 2;
+        const y = 10 + chartH - barH;
+        chartCtx.fillStyle = hr === currentHour ? "#38bdf8" : "rgba(56, 189, 248, 0.4)";
+        chartCtx.fillRect(x, y, barWidth, barH);
+        if (hr % 3 === 0) {
+          chartCtx.fillStyle = "#94a3b8";
+          chartCtx.font = "10px sans-serif";
+          chartCtx.textAlign = "center";
+          chartCtx.fillText(`${hr}:00`, x + barWidth / 2, h - 8);
+        }
+      });
+
+      chartCtx.beginPath();
+      chartCtx.strokeStyle = "#34d399";
+      chartCtx.lineWidth = 2;
+      hourlyData.forEach((d, hr) => {
+        const x = paddingLeft + hr * slotWidth + slotWidth / 2;
+        const y = 10 + chartH - (d.pop / 100) * chartH;
+        if (hr === 0) chartCtx.moveTo(x, y);
+        else chartCtx.lineTo(x, y);
+      });
+      chartCtx.stroke();
+
+      const activeX = paddingLeft + currentHour * slotWidth + slotWidth / 2;
+      chartCtx.strokeStyle = "#f59e0b";
+      chartCtx.lineWidth = 1.5;
+      chartCtx.setLineDash([4, 4]);
+      chartCtx.beginPath();
+      chartCtx.moveTo(activeX, 10);
+      chartCtx.lineTo(activeX, 10 + chartH);
+      chartCtx.stroke();
+      chartCtx.setLineDash([]);
+    }
+
+    function hitTest(lon, lat) {
+      // 縮放夠近：可直接點任何鄉鎮（拖曳到別區後選取）
+      if (viewLevel === "town" && camera.span < 1.35) {
+        for (const t of townFC.features) {
+          const b = t._bbox;
+          if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) continue;
+          if (pointInFeature(lon, lat, t)) return { type: "town", feature: t };
+        }
+      }
+      if (viewLevel === "town" && selectedCounty) {
+        const towns = townsByCounty[selectedCounty.properties.COUNTYNAME] || [];
+        for (const t of towns) {
+          if (pointInFeature(lon, lat, t)) return { type: "town", feature: t };
+        }
+        for (const c of countyFC.features) {
+          if (c.properties.COUNTYNAME === selectedCounty.properties.COUNTYNAME) continue;
+          if (pointInFeature(lon, lat, c)) return { type: "county", feature: c };
+        }
+        if (pointInFeature(lon, lat, selectedCounty)) return { type: "county", feature: selectedCounty };
+        return null;
+      }
+      for (const c of countyFC.features) {
+        if (pointInFeature(lon, lat, c)) return { type: "county", feature: c };
+      }
+      return null;
+    }
+
+    const mapDrag = {
+      active: false,
+      moved: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      originLon: 0,
+      originLat: 0
+    };
+
+    function canvasCoords(e) {
+      const rect = mapCanvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (mapCanvas.width / rect.width),
+        y: (e.clientY - rect.top) * (mapCanvas.height / rect.height)
+      };
+    }
+
+    function panByPixels(dx, dy) {
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      const span = camera.span;
+      const dLon = -(dx / (w * 0.9)) * span;
+      const dLat = (dy / (h * 0.9)) * span;
+      camera.lon = mapDrag.originLon + dLon;
+      camera.lat = mapDrag.originLat + dLat;
+      camera.targetLon = camera.lon;
+      camera.targetLat = camera.lat;
+    }
+
+    function handleMapSelect(lon, lat) {
+      const hit = hitTest(lon, lat);
+      if (!hit) return;
+      if (hit.type === "county") {
+        if (viewLevel === "county" ||
+            (selectedCounty && hit.feature.properties.COUNTYNAME !== selectedCounty.properties.COUNTYNAME)) {
+          enterCounty(hit.feature, true);
+        }
+      } else if (hit.type === "town") {
+        // 拖曳探索時點選：不強制重設視角
+        selectTown(hit.feature, { keepView: true });
+      }
+    }
+
+    mapCanvas.addEventListener("pointerdown", e => {
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      const { x, y } = canvasCoords(e);
+      mapDrag.active = true;
+      mapDrag.moved = false;
+      mapDrag.pointerId = e.pointerId;
+      mapDrag.startX = x;
+      mapDrag.startY = y;
+      mapDrag.originLon = camera.lon;
+      mapDrag.originLat = camera.lat;
+      mapCanvas.setPointerCapture(e.pointerId);
+      mapCanvas.classList.add("is-dragging");
+    });
+
+    mapCanvas.addEventListener("pointermove", e => {
+      const { x, y } = canvasCoords(e);
+
+      if (mapDrag.active && e.pointerId === mapDrag.pointerId) {
+        const dx = x - mapDrag.startX;
+        const dy = y - mapDrag.startY;
+        if (!mapDrag.moved && Math.hypot(dx, dy) > 5) mapDrag.moved = true;
+        if (mapDrag.moved) {
+          panByPixels(dx, dy);
+          hoverName = "";
+        }
+        return;
+      }
+
+      const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
+      const hit = hitTest(geo.lon, geo.lat);
+      if (!hit) { hoverName = ""; return; }
+      if (hit.type === "town") {
+        hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · ${rainForTown(hit.feature, currentHour).rain} mm/h`;
+      } else {
+        hoverName = `${hit.feature.properties.COUNTYNAME} · 均 ${rainForCounty(hit.feature, currentHour).rain} mm/h`;
+      }
+    });
+
+    function endMapPointer(e) {
+      if (!mapDrag.active || e.pointerId !== mapDrag.pointerId) return;
+      const wasDrag = mapDrag.moved;
+      const { x, y } = canvasCoords(e);
+      mapDrag.active = false;
+      mapDrag.pointerId = null;
+      mapCanvas.classList.remove("is-dragging");
+      try { mapCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+
+      if (!wasDrag) {
+        const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
+        handleMapSelect(geo.lon, geo.lat);
+      }
+    }
+
+    mapCanvas.addEventListener("pointerup", endMapPointer);
+    mapCanvas.addEventListener("pointercancel", endMapPointer);
+
+    // 滾輪縮放（以游標為中心）
+    mapCanvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      const { x, y } = canvasCoords(e);
+      const before = unproject(x, y, mapCanvas.width, mapCanvas.height);
+      const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+      const next = Math.min(5.5, Math.max(0.04, camera.span * factor));
+      camera.span = next;
+      camera.targetSpan = next;
+      const after = unproject(x, y, mapCanvas.width, mapCanvas.height);
+      camera.lon += before.lon - after.lon;
+      camera.lat += before.lat - after.lat;
+      camera.targetLon = camera.lon;
+      camera.targetLat = camera.lat;
+    }, { passive: false });
+
+    citySelect.addEventListener("change", e => {
+      const name = e.target.value;
+      if (!name) { resetOverview(); return; }
+      const found = countyFC.features.find(c => c.properties.COUNTYNAME === name);
+      if (found) enterCounty(found, true);
+    });
+
+    townSelect.addEventListener("change", e => {
+      const code = e.target.value;
+      if (!code || !selectedCounty) return;
+      const found = (townsByCounty[selectedCounty.properties.COUNTYNAME] || [])
+        .find(t => t.properties.TOWNCODE === code);
+      if (found) selectTown(found);
+    });
+
+    resetBtn.addEventListener("click", resetOverview);
+    backBtn.addEventListener("click", goBack);
+    locateBtn.addEventListener("click", () => locateDevice(false));
+
+    timeSlider.addEventListener("input", e => {
+      currentHour = parseInt(e.target.value, 10);
+      timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+      updateInfoPanel();
+      drawChart();
+    });
+
+    playBtn.addEventListener("click", () => {
+      isPlaying = !isPlaying;
+      if (isPlaying) {
+        playBtn.textContent = "❚❚ 暫停";
+        playBtn.style.background = "#e11d48";
+        playInterval = setInterval(() => {
+          currentHour = (currentHour + 1) % 24;
+          timeSlider.value = currentHour;
+          timeOverlay.textContent = `預報時間：${String(currentHour).padStart(2, "0")}:00`;
+          updateInfoPanel();
+          drawChart();
+        }, 1200);
+      } else {
+        playBtn.textContent = "▶ 播放預報";
+        playBtn.style.background = "var(--accent)";
+        clearInterval(playInterval);
+      }
+    });
+
+    function resizeCanvases() {
+      const wrap = document.getElementById("canvasWrapper");
+      mapCanvas.width = wrap.clientWidth;
+      mapCanvas.height = wrap.clientHeight;
+      const chartCard = chartCanvas.parentElement;
+      chartCanvas.width = chartCard.clientWidth - 32;
+      chartCanvas.height = 140;
+      updateInfoPanel();
+      drawChart();
+    }
+
+    window.addEventListener("resize", resizeCanvases);
+    resizeCanvases();
+    drawMap();
+    // 預設抓取裝置位置並對應到鄉鎮
+    locateDevice(true);
+  </script>
+</body>
+</html>
