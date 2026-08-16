@@ -621,6 +621,82 @@
     return best;
   }
 
+  const DAY_JOURNAL_KEY = "YijiaMangoWeather.dayJournal.v1";
+
+  function placeKey(countyName, townName) {
+    return `${normName(countyName)}||${normName(townName || "")}`;
+  }
+
+  function loadDayJournal() {
+    try {
+      const raw = localStorage.getItem(DAY_JOURNAL_KEY);
+      if (!raw) return { day: todayKey(), places: {} };
+      const j = JSON.parse(raw);
+      if (!j || typeof j !== "object") return { day: todayKey(), places: {} };
+      if (j.day !== todayKey()) return { day: todayKey(), places: {} };
+      if (!j.places || typeof j.places !== "object") j.places = {};
+      return j;
+    } catch (_) {
+      return { day: todayKey(), places: {} };
+    }
+  }
+
+  function saveDayJournal(journal) {
+    try {
+      localStorage.setItem(DAY_JOURNAL_KEY, JSON.stringify(journal));
+    } catch (_) { /* quota / private mode */ }
+  }
+
+  function ingestDayJournal(countyName, townName, series) {
+    if (!countyName || !series?.length) return;
+    const journal = loadDayJournal();
+    const key = placeKey(countyName, townName);
+    const place = journal.places[key] || { hours: {} };
+    let changed = false;
+    for (const h of series) {
+      // 只記錄當下官方仍在回傳的 3h／12h 點
+      if (h.resolution !== "3h" && h.resolution !== "12h") continue;
+      if (h.pop == null) continue;
+      const prev = place.hours[String(h.hour)];
+      const next = {
+        pop: h.pop,
+        t: h.t || "",
+        wx: h.wx || "",
+        resolution: h.resolution,
+        at: Date.now()
+      };
+      if (!prev || prev.pop !== next.pop || prev.t !== next.t || prev.wx !== next.wx) {
+        place.hours[String(h.hour)] = next;
+        changed = true;
+      }
+    }
+    if (changed) {
+      journal.places[key] = place;
+      journal.day = todayKey();
+      saveDayJournal(journal);
+    }
+  }
+
+  function mergeDayJournal(countyName, townName, series) {
+    if (!countyName || !series?.length) return series;
+    const journal = loadDayJournal();
+    const place = journal.places[placeKey(countyName, townName)];
+    if (!place?.hours) return series;
+    return series.map((h) => {
+      if (h.pop != null) return h;
+      const cached = place.hours[String(h.hour)];
+      if (!cached || cached.pop == null) return h;
+      return {
+        ...h,
+        pop: cached.pop,
+        t: h.t || cached.t || "",
+        wx: h.wx || cached.wx || "",
+        resolution: "cache",
+        fromCache: true
+      };
+    });
+  }
+
   function hourlySeries(countyName, townName, dayOffset) {
     const pack = resolvePack(countyName, townName);
     const targetDay = addDaysKey(todayKey(), dayOffset);
@@ -659,6 +735,11 @@
         desc: slot3?.desc || slot12?.desc || "",
         resolution: src
       });
+    }
+    // 僅「今天」：寫入本機日記＋用日記補官方已撤下的過去小時
+    if (dayOffset === 0 && countyName) {
+      ingestDayJournal(countyName, townName, out);
+      return mergeDayJournal(countyName, townName, out);
     }
     return out;
   }
@@ -771,7 +852,8 @@
       periods: slotsDay.periods.length ? slotsDay.periods : weeklyDay.periods,
       peakHour,
       resolution: popHours.some((h) => h.resolution === "3h") || slotsDay.count ? "3h"
-        : popHours.some((h) => h.resolution === "12h") || weeklyDay.count ? "12h" : "—"
+        : popHours.some((h) => h.resolution === "12h") || weeklyDay.count ? "12h"
+        : popHours.some((h) => h.resolution === "cache") ? "cache" : "—"
     };
   }
 
@@ -959,6 +1041,7 @@
     todayKey,
     addDaysKey,
     hourOf,
+    loadDayJournal,
     COUNTY_WEEKLY,
     COUNTY_3DAY,
     SAT_PRODUCTS,
