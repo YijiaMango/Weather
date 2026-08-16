@@ -736,7 +736,9 @@
   // 雷達整合回波圖（約每 10 分鐘更新）— 對齊 NCDR 落雨小幫手的「即時感」
   const RADAR_PRODUCTS = {
     near: { id: "O-A0058-003", label: "鄰近·無地形" },
+    near_clear: { id: "O-A0058-006", label: "鄰近·透明底" },
     wide: { id: "O-A0058-001", label: "大範圍·無地形" },
+    wide_clear: { id: "O-A0058-005", label: "大範圍·透明底" },
     terrain: { id: "O-A0058-002", label: "大範圍·有地形" }
   };
 

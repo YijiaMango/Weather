@@ -156,9 +156,16 @@
       left: 0;
       top: 0;
       transform-origin: 0 0;
-      opacity: 0.88;
+      opacity: 0.95;
       image-rendering: auto;
       display: none;
+      /* 白底官圖 → 深色底（invert + 色相回正） */
+      filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.05);
+    }
+    #radarOverlayImg.radar-clear {
+      /* 官方透明底圖：不需反色 */
+      filter: none;
+      opacity: 0.92;
     }
     canvas#mapCanvas {
       position: relative;
@@ -808,18 +815,17 @@
       initRadarOverlay();
     }
 
-    // —— 即時雷達疊圖（與拉桿同步，無手動重整）——
-    // 鄰近區域地理範圍（對齊 O-A0058-003 / CV1_TW_1000）
+    // —— 即時雷達疊圖（深色／透明底；與拉桿同步）——
     const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
-    const RADAR_STEPS = 18; // 0=−3h … 18=最新
+    const RADAR_STEPS = 18;
     let radarStep = RADAR_STEPS;
-    const radarCache = new Map(); // stamp -> HTMLImageElement | 'fail'
+    const radarCache = new Map();
     let radarLatestMs = 0;
+    let radarClearUrl = ""; // O-A0058-006 透明底（最新幀）
 
     function pad2(n) { return String(n).padStart(2, "0"); }
 
     function floorRadarClock(ms = Date.now()) {
-      // 對齊 10 分鐘；氣象署通常落後約 10 分
       return Math.floor(ms / 600000) * 600000 - 10 * 60000;
     }
 
@@ -854,7 +860,7 @@
           radarCache.set(stamp, val);
           resolve(val);
         };
-        const timer = setTimeout(() => finish("fail"), 8000);
+        const timer = setTimeout(() => finish("fail"), 6000);
         img.onload = () => finish(img);
         img.onerror = () => finish("fail");
         img.src = radarUrl(stamp);
@@ -863,9 +869,24 @@
       return p;
     }
 
+    async function loadClearRadarLatest() {
+      try {
+        const pack = await CWA.loadRadar("near_clear");
+        radarClearUrl = pack.rawUrl || pack.imageUrl;
+        if (pack.obsTime) {
+          const t = new Date(pack.obsTime).getTime();
+          if (!Number.isNaN(t)) radarLatestMs = Math.floor(t / 600000) * 600000;
+        }
+        return pack;
+      } catch (err) {
+        console.warn("clear radar failed", err);
+        return null;
+      }
+    }
+
     async function findLatestRadarMs() {
       let t = floorRadarClock();
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 6; i++) {
         const stamp = stampFromMs(t);
         const hit = await preloadRadarStamp(stamp);
         if (hit !== "fail") return t;
@@ -875,10 +896,9 @@
     }
 
     function prefetchRadarWindow() {
-      // 背景預載，不阻塞 UI
+      if (!radarLatestMs) return;
       for (let step = 0; step <= RADAR_STEPS; step++) {
-        const stamp = stampFromMs(msFromRadarStep(step));
-        preloadRadarStamp(stamp);
+        preloadRadarStamp(stampFromMs(msFromRadarStep(step)));
       }
     }
 
@@ -896,14 +916,30 @@
       img.style.height = `${br.y - tl.y}px`;
     }
 
+    function showRadarSrc(src, clearBg) {
+      const img = document.getElementById("radarOverlayImg");
+      if (!img || !src) return;
+      img.classList.toggle("radar-clear", !!clearBg);
+      if (img.getAttribute("src") !== src) img.src = src;
+      img.style.display = "block";
+      if (img.complete && img.naturalWidth) layoutRadarOverlay();
+      else img.onload = () => layoutRadarOverlay();
+    }
+
     let radarApplyToken = 0;
-    async function applyRadarStep(step, opts = {}) {
-      if (!radarLatestMs) return;
+    async function applyRadarStep(step) {
       const token = ++radarApplyToken;
       radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
-      const ms = msFromRadarStep(radarStep);
-      const stamp = stampFromMs(ms);
 
+      // 最新幀優先用官方透明底（深色友善、無白底）
+      if (radarStep === RADAR_STEPS && radarClearUrl) {
+        const bust = `${radarClearUrl}${radarClearUrl.includes("?") ? "&" : "?"}t=${radarLatestMs || Date.now()}`;
+        showRadarSrc(bust, true);
+        return;
+      }
+
+      if (!radarLatestMs) return;
+      const stamp = stampFromMs(msFromRadarStep(radarStep));
       let asset = radarCache.get(stamp);
       if (asset instanceof Promise) asset = await asset;
       if (token !== radarApplyToken) return;
@@ -911,6 +947,11 @@
       if (token !== radarApplyToken) return;
       if (asset === "fail" || !asset) {
         for (let s = radarStep + 1; s <= RADAR_STEPS; s++) {
+          if (s === RADAR_STEPS && radarClearUrl) {
+            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`, true);
+            radarStep = s;
+            return;
+          }
           const alt = stampFromMs(msFromRadarStep(s));
           let a = radarCache.get(alt);
           if (a instanceof Promise) a = await a;
@@ -921,36 +962,41 @@
         }
       }
       if (token !== radarApplyToken) return;
-      const img = document.getElementById("radarOverlayImg");
       if (asset && asset !== "fail") {
-        const nextSrc = asset.src || radarUrl(stamp);
-        if (img.getAttribute("src") !== nextSrc) img.src = nextSrc;
-        img.style.display = "block";
-        if (img.complete && img.naturalWidth) layoutRadarOverlay();
-        else img.onload = () => layoutRadarOverlay();
+        showRadarSrc(asset.src || radarUrl(stamp), false);
       }
     }
 
     async function syncRadarFromSharedSlider() {
-      if (!radarLatestMs) return;
       if (currentDayOffset !== 0) {
-        await applyRadarStep(RADAR_STEPS, { silent: true });
+        await applyRadarStep(RADAR_STEPS);
         return;
       }
+      if (!radarLatestMs && !radarClearUrl) return;
+      const latest = radarLatestMs || floorRadarClock();
       const now = new Date();
       const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), currentHour, 0, 0).getTime();
       let ms = Math.floor(target / 600000) * 600000;
-      const oldest = radarLatestMs - RADAR_STEPS * 10 * 60000;
-      if (ms > radarLatestMs) ms = radarLatestMs;
+      const oldest = latest - RADAR_STEPS * 10 * 60000;
+      if (ms > latest) ms = latest;
       if (ms < oldest) ms = oldest;
       const step = Math.round((ms - oldest) / (10 * 60000));
-      await applyRadarStep(step, { silent: true });
+      await applyRadarStep(step);
     }
 
     async function initRadarOverlay() {
       try {
-        radarLatestMs = await findLatestRadarMs();
+        // 先上透明底最新圖（深色主題），再開歷史白底序列（會反色）
+        await loadClearRadarLatest();
         await applyRadarStep(RADAR_STEPS);
+        if (!radarLatestMs) radarLatestMs = await findLatestRadarMs();
+        else {
+          // 並行確認時間軸最新點，不阻塞顯示
+          findLatestRadarMs().then((t) => {
+            if (t) radarLatestMs = t;
+            prefetchRadarWindow();
+          });
+        }
         prefetchRadarWindow();
         syncTimeOverlay();
       } catch (err) {
@@ -958,13 +1004,13 @@
       }
       setInterval(async () => {
         try {
-          const prevLatest = radarLatestMs;
-          radarLatestMs = await findLatestRadarMs();
-          if (radarLatestMs !== prevLatest) {
-            prefetchRadarWindow();
-            await syncRadarFromSharedSlider();
-            syncTimeOverlay();
-          }
+          await loadClearRadarLatest();
+          const prev = radarLatestMs;
+          const t = await findLatestRadarMs();
+          if (t) radarLatestMs = t;
+          if (radarLatestMs !== prev) prefetchRadarWindow();
+          await syncRadarFromSharedSlider();
+          syncTimeOverlay();
         } catch (_) { /* ignore */ }
       }, 60 * 1000);
     }
