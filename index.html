@@ -358,9 +358,7 @@
     }
     .sat-tabs button.active,
     #liveModeRadar.active,
-    #liveModeSat.active,
-    #mapModePop.active,
-    #mapModeLive.active {
+    #liveModeSat.active {
       background: var(--accent);
       border-color: var(--accent);
       font-weight: 600;
@@ -411,12 +409,6 @@
         <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
         <canvas id="mapCanvas"></canvas>
         <div class="canvas-overlay-time" id="timeOverlay">預報時間：12:00</div>
-        <div class="legend">
-          <div style="display:flex;gap:4px;">
-            <button type="button" id="mapModePop" class="active" style="padding:4px 8px;font-size:0.72rem;">預報</button>
-            <button type="button" id="mapModeLive" style="padding:4px 8px;font-size:0.72rem;">即時雨量</button>
-          </div>
-        </div>
       </div>
 
       <div class="timeline-card">
@@ -919,13 +911,6 @@
           syncTimeOverlay();
         } catch (_) { /* ignore */ }
       }, 60 * 1000);
-    }
-
-    let mapMode = "pop"; // pop | live
-
-    function syncMapModeUi() {
-      document.getElementById("mapModePop").classList.toggle("active", mapMode === "pop");
-      document.getElementById("mapModeLive").classList.toggle("active", mapMode === "live");
     }
 
     function updateLiveRainPanel() {
@@ -1752,21 +1737,11 @@
         const hit = hitTest(geo.lon, geo.lat);
         if (!hit) { hoverName = ""; return; }
         if (hit.type === "town") {
-          if (mapMode === "live") {
-            const r = CWA.nearestRain(hit.feature._c.lon, hit.feature._c.lat, hit.feature.properties.COUNTYNAME, hit.feature.properties.TOWNNAME);
-            hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 近1h ${r ? r.rain.h1 : 0} mm`;
-          } else {
-            const pop = popForTownFeature(hit.feature, currentHour, currentDayOffset);
-            hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 降雨機率 ${pop}%`;
-          }
+          const pop = popForTownFeature(hit.feature, currentHour, currentDayOffset);
+          hoverName = `${hit.feature.properties.COUNTYNAME} · ${hit.feature.properties.TOWNNAME} · 降雨機率 ${pop}%`;
         } else {
-          if (mapMode === "live") {
-            const r = CWA.rainForCounty(hit.feature.properties.COUNTYNAME);
-            hoverName = `${hit.feature.properties.COUNTYNAME} · 近1h 最大 ${r ? r.max1h : 0} mm`;
-          } else {
-            const pop = popForCountyFeature(hit.feature, currentHour, currentDayOffset);
-            hoverName = `${hit.feature.properties.COUNTYNAME} · 降雨機率 ${pop}%`;
-          }
+          const pop = popForCountyFeature(hit.feature, currentHour, currentDayOffset);
+          hoverName = `${hit.feature.properties.COUNTYNAME} · 降雨機率 ${pop}%`;
         }
         return;
       }
@@ -1868,23 +1843,11 @@
     drawMap();
     document.title = "YijiaMango Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => locateDevice(true));
-    syncMapModeUi();
-    document.getElementById("mapModePop").addEventListener("click", () => {
-      mapMode = "pop";
-      syncMapModeUi();
-      drawMap();
-    });
-    document.getElementById("mapModeLive").addEventListener("click", () => {
-      mapMode = "live";
-      syncMapModeUi();
-      drawMap();
-    });
-    // 雨量站背景更新（不影響拉桿）
+    // 雨量站背景更新（右側面板）
     setInterval(async () => {
       try {
         await CWA.loadRainStations();
         updateLiveRainPanel();
-        if (mapMode === "live") drawMap();
       } catch (_) { /* ignore */ }
     }, 5 * 60 * 1000);
   </script>
