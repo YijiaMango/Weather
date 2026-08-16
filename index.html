@@ -390,8 +390,8 @@
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
         <span style="font-weight: 600; font-size: 0.95rem;">未來一週官方預報</span>
         <div class="chart-legend">
-          <span><span class="dot" style="background:#34d399;"></span>降雨機率</span>
-          <span><span class="dot" style="background:#38bdf8;"></span>氣溫</span>
+          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
         </div>
       </div>
       <div class="week-strip" id="weekStrip"></div>
@@ -1477,12 +1477,37 @@
       const slotWidth = chartW / 24;
       const barWidth = slotWidth * 0.62;
 
+      // 降雨機率：低綠 → 中藍 → 高紫
+      function popBarColor(pop, active) {
+        const t = Math.max(0, Math.min(1, pop / 100));
+        let r, g, b;
+        if (t < 0.5) {
+          const u = t / 0.5; // 綠 #22c55e → 藍 #3b82f6
+          r = Math.round(34 + (59 - 34) * u);
+          g = Math.round(197 + (130 - 197) * u);
+          b = Math.round(94 + (246 - 94) * u);
+        } else {
+          const u = (t - 0.5) / 0.5; // 藍 #3b82f6 → 紫 #7c3aed
+          r = Math.round(59 + (124 - 59) * u);
+          g = Math.round(130 + (58 - 130) * u);
+          b = Math.round(246 + (237 - 246) * u);
+        }
+        const a = active ? 0.95 : 0.72;
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+      }
+
       hourlyData.forEach((d, hr) => {
         const barH = Math.min(chartH, (d.pop / 100) * chartH);
         const x = paddingLeft + hr * slotWidth + (slotWidth - barWidth) / 2;
         const y = 10 + chartH - barH;
-        chartCtx.fillStyle = hr === currentHour ? "#34d399" : "rgba(52, 211, 153, 0.4)";
+        const active = hr === currentHour;
+        chartCtx.fillStyle = popBarColor(d.pop, active);
         chartCtx.fillRect(x, y, barWidth, Math.max(0, barH));
+        if (active) {
+          chartCtx.strokeStyle = "#f8fafc";
+          chartCtx.lineWidth = 1.5;
+          chartCtx.strokeRect(x, y, barWidth, Math.max(1, barH));
+        }
 
         if (hr % 3 === 0) {
           chartCtx.fillStyle = "#94a3b8";
@@ -1492,7 +1517,7 @@
         }
       });
 
-      // 氣溫折線（有逐時溫度時）
+      // 氣溫折線（綠色）
       const temps = hourlyData.map((d) => parseFloat(d.t)).filter((n) => !Number.isNaN(n));
       if (temps.length >= 2) {
         const tMin = Math.min(...temps) - 1;
@@ -1508,8 +1533,8 @@
           if (!started) { chartCtx.moveTo(x, y); started = true; }
           else chartCtx.lineTo(x, y);
         });
-        chartCtx.strokeStyle = "#38bdf8";
-        chartCtx.lineWidth = 2;
+        chartCtx.strokeStyle = "#4ade80";
+        chartCtx.lineWidth = 2.25;
         chartCtx.stroke();
 
         hourlyData.forEach((d, hr) => {
@@ -1517,12 +1542,13 @@
           if (Number.isNaN(tv) || hr % 3 !== 0) return;
           const x = paddingLeft + hr * slotWidth + slotWidth / 2;
           const y = 10 + chartH - ((tv - tMin) / span) * chartH;
-          chartCtx.fillStyle = "#38bdf8";
+          chartCtx.fillStyle = "#4ade80";
           chartCtx.beginPath();
           chartCtx.arc(x, y, 2.5, 0, Math.PI * 2);
           chartCtx.fill();
           chartCtx.font = "9px sans-serif";
           chartCtx.textAlign = "center";
+          chartCtx.fillStyle = "#86efac";
           chartCtx.fillText(`${tv}°`, x, Math.max(14, y - 6));
         });
       }
