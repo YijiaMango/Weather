@@ -141,7 +141,7 @@
     #radarOverlayLayer {
       position: absolute;
       inset: 0;
-      z-index: 3;
+      z-index: 1;
       pointer-events: none;
       overflow: hidden;
     }
@@ -150,8 +150,7 @@
       left: 0;
       top: 0;
       transform-origin: 0 0;
-      mix-blend-mode: multiply;
-      opacity: 0.92;
+      opacity: 0.88;
       image-rendering: auto;
       display: none;
     }
@@ -163,7 +162,7 @@
       display: block;
       cursor: grab;
       touch-action: none;
-      background: #080d1a;
+      background: transparent;
     }
     .radar-dock {
       position: absolute;
@@ -798,8 +797,8 @@
     }
 
     function rainColor(pop, selected) {
-      const a = selected ? 0.42 : 0.28;
-      if (pop <= 10) return `rgba(30, 58, 95, ${selected ? 0.4 : 0.22})`;
+      const a = selected ? 0.72 : 0.52;
+      if (pop <= 10) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.38})`;
       if (pop <= 30) return `rgba(56, 189, 248, ${a})`;
       if (pop <= 50) return `rgba(34, 197, 94, ${a})`;
       if (pop <= 70) return `rgba(234, 179, 8, ${a})`;
@@ -985,8 +984,8 @@
     }
 
     function liveRainColor(mm, selected) {
-      const a = selected ? 0.42 : 0.28;
-      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.4 : 0.22})`;
+      const a = selected ? 0.72 : 0.52;
+      if (mm <= 0.1) return `rgba(30, 58, 95, ${selected ? 0.55 : 0.38})`;
       if (mm <= 2) return `rgba(56, 189, 248, ${a})`;
       if (mm <= 5) return `rgba(34, 197, 94, ${a})`;
       if (mm <= 10) return `rgba(234, 179, 8, ${a})`;
