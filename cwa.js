@@ -1,11 +1,11 @@
 /**
  * YijiaMango_Weather — 中央氣象署 Open Data 客戶端
  * 資料集：F-C0032-001（縣市 36h）、F-D0047-*（鄉鎮一週）
- * 需授權碼：https://opendata.cwa.gov.tw/
  */
 (function (global) {
   const BASE = "https://opendata.cwa.gov.tw/api/v1/rest/datastore";
-  const KEY_STORAGE = "CWA_API_KEY";
+  // 內建授權碼（正式發布用）
+  const CWA_API_KEY = "CWA-B5A814BD-5727-46BE-9ABF-308866067A16";
 
   const COUNTY_WEEKLY = {
     "宜蘭縣": "F-D0047-003",
@@ -32,6 +32,17 @@
     "金門縣": "F-D0047-087"
   };
 
+  // 官方回傳可能是英文代碼或中文名稱
+  const EL_ALIASES = {
+    PoP12h: ["PoP12h", "12小時降雨機率", "降雨機率"],
+    PoP: ["PoP", "降雨機率", "12小時降雨機率"],
+    Wx: ["Wx", "天氣現象"],
+    MinT: ["MinT", "最低溫度", "最低溫"],
+    MaxT: ["MaxT", "最高溫度", "最高溫"],
+    T: ["T", "平均溫度", "溫度"],
+    WeatherDescription: ["WeatherDescription", "天氣預報綜合描述"]
+  };
+
   function normName(s) {
     return String(s || "").replace(/台/g, "臺").trim();
   }
@@ -41,30 +52,12 @@
   }
 
   function getKey() {
-    const q = new URLSearchParams(location.search).get("cwa_key");
-    if (q) {
-      localStorage.setItem(KEY_STORAGE, q.trim());
-      // 清掉網址上的金鑰，避免外流
-      const u = new URL(location.href);
-      u.searchParams.delete("cwa_key");
-      history.replaceState(null, "", u.pathname + u.search + u.hash);
-    }
-    return (localStorage.getItem(KEY_STORAGE) || "").trim();
-  }
-
-  function setKey(key) {
-    localStorage.setItem(KEY_STORAGE, (key || "").trim());
-  }
-
-  function clearKey() {
-    localStorage.removeItem(KEY_STORAGE);
+    return CWA_API_KEY;
   }
 
   async function fetchDatastore(datasetId, extra = {}) {
-    const key = getKey();
-    if (!key) throw new Error("NO_KEY");
     const url = new URL(`${BASE}/${datasetId}`);
-    url.searchParams.set("Authorization", key);
+    url.searchParams.set("Authorization", getKey());
     url.searchParams.set("format", "JSON");
     Object.entries(extra).forEach(([k, v]) => {
       if (v != null && v !== "") url.searchParams.set(k, v);
@@ -79,10 +72,8 @@
     return json;
   }
 
-  /** 統一讀 PascalCase / camelCase */
   function locList(payload) {
     const rec = payload.records || {};
-    // F-D0047: records.Locations[0].Location
     if (Array.isArray(rec.Locations) && rec.Locations[0]) {
       return {
         countyName: rec.Locations[0].LocationsName || rec.Locations[0].locationsName,
@@ -95,7 +86,6 @@
         towns: rec.locations[0].location || rec.locations[0].Location || []
       };
     }
-    // F-C0032-001: records.location
     if (Array.isArray(rec.location)) {
       return { countyName: null, towns: rec.location };
     }
@@ -121,10 +111,34 @@
     const ev = t.elementValue || t.ElementValue || t.parameter || t.Parameter;
     if (Array.isArray(ev)) {
       const v = ev[0];
-      return (v && (v.value ?? v.Value ?? v.parameterName ?? v.ParameterName)) ?? "";
+      if (!v || typeof v !== "object") return v == null ? "" : String(v);
+      return (
+        v.value ??
+        v.Value ??
+        v.parameterName ??
+        v.ParameterName ??
+        v.ProbabilityOfPrecipitation ??
+        v.Weather ??
+        v.MinTemperature ??
+        v.MaxTemperature ??
+        v.Temperature ??
+        v.WeatherDescription ??
+        Object.values(v).find((x) => x != null && x !== "") ??
+        ""
+      );
     }
     if (ev && typeof ev === "object") {
-      return ev.parameterName || ev.ParameterName || ev.value || ev.Value || "";
+      return (
+        ev.parameterName ||
+        ev.ParameterName ||
+        ev.value ||
+        ev.Value ||
+        ev.ProbabilityOfPrecipitation ||
+        ev.Weather ||
+        ev.MinTemperature ||
+        ev.MaxTemperature ||
+        ""
+      );
     }
     return "";
   }
@@ -135,6 +149,14 @@
 
   function periodEnd(t) {
     return t.endTime || t.EndTime || "";
+  }
+
+  function findElement(byEl, logicalKey) {
+    const aliases = EL_ALIASES[logicalKey] || [logicalKey];
+    for (const a of aliases) {
+      if (byEl[a]) return byEl[a];
+    }
+    return [];
   }
 
   function parseTownForecast(loc) {
@@ -148,36 +170,47 @@
         value: String(periodValue(t))
       }));
     }
-    // 合併為 periods（以 PoP12h 或 PoP 時間軸為主）
-    const axis = byEl.PoP12h || byEl.PoP || byEl.Wx || [];
-    const periods = axis.map((p, i) => {
-      const pick = (key) => (byEl[key] && byEl[key][i] ? byEl[key][i].value : "") ||
-        (byEl[key] || []).find((x) => x.start === p.start)?.value || "";
-      const popRaw = pick("PoP12h") || pick("PoP") || "0";
+
+    const axis = findElement(byEl, "PoP12h");
+    const axis2 = axis.length ? axis : findElement(byEl, "PoP");
+    const axis3 = axis2.length ? axis2 : findElement(byEl, "Wx");
+    const periods = axis3.map((p, i) => {
+      const pickAt = (logicalKey) => {
+        const arr = findElement(byEl, logicalKey);
+        if (arr[i]) return arr[i].value;
+        const hit = arr.find((x) => x.start === p.start);
+        return hit ? hit.value : "";
+      };
+      const popRaw = pickAt("PoP12h") || pickAt("PoP") || "0";
       const pop = Math.max(0, Math.min(100, parseInt(popRaw, 10) || 0));
       return {
         start: p.start,
         end: p.end,
         pop,
-        wx: pick("Wx"),
-        minT: pick("MinT"),
-        maxT: pick("MaxT"),
-        t: pick("T"),
-        desc: pick("WeatherDescription")
+        wx: pickAt("Wx"),
+        minT: pickAt("MinT"),
+        maxT: pickAt("MaxT"),
+        t: pickAt("T"),
+        desc: pickAt("WeatherDescription")
       };
     });
     return { name, periods };
   }
 
   const cache = {
-    county36: null, // F-C0032-001 parsed
-    weekly: {} // countyName -> { towns: { townName: periods }, updated }
+    county36: null,
+    weekly: {}
   };
 
   function dayKey(iso) {
     if (!iso) return "";
-    // 用台灣日期：字串前 10 碼 YYYY-MM-DD（CWA 為本地時間）
-    return iso.slice(0, 10);
+    // 支援 "2026-08-16 18:00:00" 與 ISO
+    return String(iso).replace(" ", "T").slice(0, 10);
+  }
+
+  function hourOf(iso) {
+    const m = String(iso || "").replace(" ", "T").match(/T(\d{2})/);
+    return m ? parseInt(m[1], 10) : 12;
   }
 
   function todayKey() {
@@ -201,16 +234,20 @@
   function pickPeriod(periods, dayOffset, hour) {
     if (!periods || !periods.length) return null;
     const targetDay = addDaysKey(todayKey(), dayOffset);
-    const covering = periods.filter((p) => dayKey(p.start) === targetDay || dayKey(p.end) === targetDay ||
-      (p.start.slice(0, 10) <= targetDay && (!p.end || p.end.slice(0, 10) >= targetDay)));
+    const covering = periods.filter((p) => {
+      const s = dayKey(p.start);
+      const e = dayKey(p.end);
+      return s === targetDay || e === targetDay || (s <= targetDay && (!e || e >= targetDay));
+    });
     const list = covering.length ? covering : periods;
-    // 用 hour 對 startTime 的小時最接近者
     let best = list[0];
     let bestScore = Infinity;
     for (const p of list) {
-      const h = parseInt((p.start.match(/T(\d{2})/) || [])[1] || "12", 10);
-      const score = Math.abs(h - hour);
-      if (score < bestScore) { bestScore = score; best = p; }
+      const score = Math.abs(hourOf(p.start) - hour);
+      if (score < bestScore) {
+        bestScore = score;
+        best = p;
+      }
     }
     return best;
   }
@@ -218,9 +255,11 @@
   function dayOutlook(periods, dayOffset) {
     const targetDay = addDaysKey(todayKey(), dayOffset);
     const list = (periods || []).filter((p) => dayKey(p.start) === targetDay);
-    if (!list.length) return { maxPop: 0, avgPop: 0, wx: "—", minT: "—", maxT: "—", count: 0 };
-    let maxPop = 0, sum = 0;
-    let minT = 99, maxT = -99;
+    if (!list.length) return { maxPop: 0, avgPop: 0, wx: "—", minT: "—", maxT: "—", count: 0, periods: [] };
+    let maxPop = 0;
+    let sum = 0;
+    let minT = 99;
+    let maxT = -99;
     let wx = list[0].wx;
     for (const p of list) {
       maxPop = Math.max(maxPop, p.pop);
@@ -243,14 +282,12 @@
   }
 
   async function loadCounty36h() {
-    const json = await fetchDatastore("F-C0032-001", {
-      ElementName: "Wx,PoP,MinT,MaxT"
-    });
+    // 不帶 ElementName：避免部分資料集過濾後欄位異常
+    const json = await fetchDatastore("F-C0032-001");
     const { towns } = locList(json);
     const map = {};
     for (const loc of towns) {
       const parsed = parseTownForecast(loc);
-      // F-C0032 uses PoP not PoP12h — parseTownForecast handles PoP
       map[normName(parsed.name)] = parsed.periods;
     }
     cache.county36 = { map, at: new Date().toISOString() };
@@ -262,9 +299,8 @@
     if (cache.weekly[cName]?.towns) return cache.weekly[cName];
     const id = COUNTY_WEEKLY[cName];
     if (!id) throw new Error(`NO_DATASET:${cName}`);
-    const json = await fetchDatastore(id, {
-      ElementName: "PoP12h,Wx,MinT,MaxT,T,WeatherDescription"
-    });
+    // 不帶 ElementName：此資料集以中文欄位名回傳
+    const json = await fetchDatastore(id);
     const { towns } = locList(json);
     const townMap = {};
     for (const loc of towns) {
@@ -278,17 +314,20 @@
   function getCountyPeriods(countyName) {
     const n = normName(countyName);
     if (cache.weekly[n]?.towns) {
-      // 縣市平均：合併所有鄉鎮同一時段
       const all = Object.values(cache.weekly[n].towns);
       if (!all.length) return cache.county36?.map[n] || [];
       const base = all[0];
       return base.map((p, i) => {
-        let pop = 0, nOk = 0;
-        let wx = p.wx, minT = 99, maxT = -99;
+        let pop = 0;
+        let nOk = 0;
+        let wx = p.wx;
+        let minT = 99;
+        let maxT = -99;
         for (const town of all) {
           const q = town[i];
           if (!q) continue;
-          pop += q.pop; nOk++;
+          pop += q.pop;
+          nOk++;
           if (q.wx) wx = q.wx;
           const a = parseInt(q.minT, 10);
           const b = parseInt(q.maxT, 10);
@@ -313,7 +352,6 @@
     const t = normName(townName);
     const weekly = cache.weekly[c]?.towns;
     if (weekly) {
-      // 精確或模糊比對（中正區等）
       if (weekly[t]) return weekly[t];
       const hit = Object.keys(weekly).find((k) => namesEqual(k, townName) || k.includes(t) || t.includes(k));
       if (hit) return weekly[hit];
@@ -323,9 +361,7 @@
 
   global.CWA = {
     getKey,
-    setKey,
-    clearKey,
-    hasKey: () => !!getKey(),
+    hasKey: () => true,
     normName,
     namesEqual,
     cache,
@@ -337,6 +373,7 @@
     dayOutlook,
     todayKey,
     addDaysKey,
+    hourOf,
     COUNTY_WEEKLY
   };
 })(window);

@@ -16,11 +16,7 @@
 | `F-C0032-001` | 縣市 36 小時總覽 |
 | `F-D0047-*` | 各縣市鄉鎮未來 1 週（12 小時為一時段） |
 
-請至 https://opendata.cwa.gov.tw/ 申請授權碼，在應用內點「API」貼上，或：
-
-`https://yijiamango.github.io/Weather/?cwa_key=你的授權碼`
-
-（金鑰會存到瀏覽器 localStorage，並從網址移除。）
+應用已內建授權，開啟即可讀取官方預報。
 
 ## 正式發布網址
 

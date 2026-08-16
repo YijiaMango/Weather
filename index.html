@@ -321,12 +321,11 @@
         <button id="backBtn" disabled>上一層</button>
         <button id="locateBtn" title="重新定位">📍 我的位置</button>
         <button id="resetBtn">全台總覽</button>
-        <button id="apiKeyBtn" title="中央氣象署 API">🔑 API</button>
         <button id="playBtn" class="primary">▶ 播放預報</button>
       </div>
     </div>
 
-    <div id="dataBanner" style="display:none;background:#7f1d1d;border:1px solid #f87171;color:#fecaca;border-radius:10px;padding:10px 14px;font-size:0.88rem;line-height:1.45;"></div>
+    <div id="dataBanner" style="display:none;background:#0f3d2e;border:1px solid #34d399;color:#bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.88rem;line-height:1.45;"></div>
 
     <div class="timeline-card">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -344,7 +343,7 @@
         <span style="font-size: 0.85rem; color: var(--text-sub);">23:00</span>
       </div>
       <canvas id="chartCanvas"></canvas>
-      <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data（需設定 API 授權碼）</div>
+      <div class="hint" id="dataSourceHint">資料來源：中央氣象署 Open Data</div>
     </div>
 
     <div class="main-grid">
@@ -391,7 +390,7 @@
         <div class="card" style="flex: 1;">
           <div class="card-title">官方預報說明</div>
           <div style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;" id="weatherAdvice">
-            預報資料來自中央氣象署 Open Data。請先設定 API 授權碼。
+            預報資料來自中央氣象署 Open Data。
           </div>
           <div class="hint" id="levelHint">目前層級：縣市總覽</div>
         </div>
@@ -475,7 +474,6 @@
     const resetBtn = document.getElementById("resetBtn");
     const backBtn = document.getElementById("backBtn");
     const locateBtn = document.getElementById("locateBtn");
-    const apiKeyBtn = document.getElementById("apiKeyBtn");
     const timeSlider = document.getElementById("timeSlider");
     const timeOverlay = document.getElementById("timeOverlay");
     const weekStrip = document.getElementById("weekStrip");
@@ -551,7 +549,7 @@
       let peakHour = 12;
       if (o.periods && o.periods.length) {
         const top = o.periods.slice().sort((a, b) => b.pop - a.pop)[0];
-        peakHour = parseInt((top.start.match(/T(\d{2})/) || [])[1] || "12", 10);
+        peakHour = CWA.hourOf(top.start);
       }
       return { ...o, peakHour };
     }
@@ -594,7 +592,7 @@
           `<div class="wd">${wd}</div>` +
           `<div class="md">${md}</div>` +
           `<div class="mm">${ready ? (outlook.wx || "—") : "—"}</div>` +
-          `<div class="pp">${ready ? outlook.maxPop + "%" : (CWA?.hasKey() ? "載入中" : "需 API")}</div>`;
+          `<div class="pp">${ready ? outlook.maxPop + "%" : "—"}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
           if (ready) currentHour = dailyOutlook(day).peakHour;
@@ -626,7 +624,7 @@
       return `rgba(239, 68, 68, ${a})`;
     }
 
-    function setDataBanner(msg, isError = true) {
+    function setDataBanner(msg, isError = false) {
       const el = document.getElementById("dataBanner");
       if (!msg) { el.style.display = "none"; el.textContent = ""; return; }
       el.style.display = "block";
@@ -636,54 +634,23 @@
       el.textContent = msg;
     }
 
-    function promptApiKey() {
-      const cur = CWA.getKey();
-      const next = prompt(
-        "請輸入中央氣象署 Open Data 授權碼（CWA-開頭）\n申請：https://opendata.cwa.gov.tw/\n留空並確定可清除金鑰。",
-        cur || ""
-      );
-      if (next === null) return;
-      if (!next.trim()) {
-        CWA.clearKey();
-        setDataBanner("尚未設定 API 授權碼：預報不會使用模擬資料。請點「API」設定中央氣象署金鑰。", true);
-        updateInfoPanel();
-        drawChart();
-        return;
-      }
-      CWA.setKey(next.trim());
-      bootstrapCwa();
-    }
-
     async function bootstrapCwa() {
       const hint = document.getElementById("dataSourceHint");
-      if (!CWA.hasKey()) {
-        setDataBanner("尚未設定 API 授權碼：預報僅顯示官方資料。請點右上「API」貼上中央氣象署授權碼。", true);
-        hint.textContent = "資料來源：中央氣象署 Open Data（未授權）";
-        updateInfoPanel();
-        drawChart();
-        return;
-      }
-      setDataBanner("正在向中央氣象署載入縣市預報…", false);
+      setDataBanner("正在載入中央氣象署官方預報…", false);
       try {
         await CWA.loadCounty36h();
         setDataBanner("");
-        hint.textContent = `資料來源：中央氣象署 Open Data · 縣市36小時已載入 · ${new Date().toLocaleString("zh-TW")}`;
+        hint.textContent = `資料來源：中央氣象署 Open Data · 縣市預報已載入 · ${new Date().toLocaleString("zh-TW")}`;
         if (selectedCounty) await ensureCountyWeekly(selectedCounty.properties.COUNTYNAME);
         updateInfoPanel();
         drawChart();
       } catch (err) {
-        const msg = String(err.message || err);
-        if (msg === "BAD_KEY" || msg === "NO_KEY") {
-          setDataBanner("授權碼無效或未設定。請至 opendata.cwa.gov.tw 申請後，點「API」重新輸入。", true);
-        } else {
-          setDataBanner(`中央氣象署資料載入失敗：${msg}`, true);
-        }
+        setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
         hint.textContent = "資料來源：中央氣象署 Open Data（載入失敗）";
       }
     }
 
     async function ensureCountyWeekly(countyName) {
-      if (!CWA.hasKey()) return;
       setDataBanner(`載入 ${countyName} 鄉鎮一週官方預報…`, false);
       try {
         const pack = await CWA.loadCountyWeekly(countyName);
@@ -822,9 +789,7 @@
         document.getElementById("valMaxT").textContent = "—";
         badge.className = "badge badge-none";
         badge.textContent = "請選取";
-        advice.textContent = CWA.hasKey()
-          ? "已連接中央氣象署。點擊縣市後載入該縣鄉鎮一週官方預報。"
-          : "尚未授權：預報不會使用模擬資料。請點「API」設定中央氣象署 Open Data 授權碼。";
+        advice.textContent = "已連接中央氣象署。點擊縣市後載入該縣鄉鎮一週官方預報。";
         hint.textContent = "目前層級：縣市總覽";
         return;
       }
@@ -853,10 +818,8 @@
         document.getElementById("valMinT").textContent = "—";
         document.getElementById("valMaxT").textContent = "—";
         badge.className = "badge badge-none";
-        badge.textContent = CWA.hasKey() ? "載入中" : "未授權";
-        advice.textContent = CWA.hasKey()
-          ? "正在等待該地區官方預報資料…"
-          : "無官方資料可顯示（已停用模擬預報）。";
+        badge.textContent = "載入中";
+        advice.textContent = "正在等待該地區官方預報資料…";
         hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區" : "目前層級：縣市";
         return;
       }
@@ -1177,14 +1140,6 @@
         chartCtx.fillText("選取縣市或鄉鎮後顯示中央氣象署預報", w / 2, h / 2);
         return;
       }
-      if (!CWA.hasKey()) {
-        chartCtx.fillStyle = "#f87171";
-        chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
-        chartCtx.textAlign = "center";
-        chartCtx.fillText("請先設定中央氣象署 API 授權碼（不使用模擬資料）", w / 2, h / 2);
-        return;
-      }
-
       const outlook = dailyOutlook(currentDayOffset);
       const periods = outlook.periods || [];
       if (!periods.length) {
@@ -1221,8 +1176,8 @@
         chartCtx.fillStyle = "#94a3b8";
         chartCtx.font = "10px sans-serif";
         chartCtx.textAlign = "center";
-        const label = (p.start.match(/T(\d{2})/) || [])[1] || "";
-        chartCtx.fillText(label ? `${label}時` : `${i + 1}`, x + barWidth / 2, h - 8);
+        const labelH = CWA.hourOf(p.start);
+        chartCtx.fillText(`${String(labelH).padStart(2, "0")}時`, x + barWidth / 2, h - 8);
 
         if (p.maxT && p.maxT !== "—") {
           chartCtx.fillStyle = "#38bdf8";
@@ -1499,7 +1454,6 @@
     resetBtn.addEventListener("click", resetOverview);
     backBtn.addEventListener("click", goBack);
     locateBtn.addEventListener("click", () => locateDevice(false));
-    apiKeyBtn.addEventListener("click", promptApiKey);
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
