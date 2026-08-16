@@ -155,6 +155,16 @@
     return new Date(String(iso).replace(" ", "T")).getTime();
   }
 
+  /** 官方 PoP；缺值／「-」回傳 null，绝不默認成 0% */
+  function parsePop(raw) {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (!s || s === "-" || s === "—" || /^n\/?a$/i.test(s)) return null;
+    const n = parseInt(s, 10);
+    if (Number.isNaN(n)) return null;
+    return Math.max(0, Math.min(100, n));
+  }
+
   function dayKey(iso) {
     if (!iso) return "";
     return String(iso).replace(" ", "T").slice(0, 10);
@@ -241,7 +251,8 @@
         hourly.map((h) => ({ ...h, f: {} })),
         start
       );
-      const pop = Math.max(0, Math.min(100, parseInt(pickField(f, ["ProbabilityOfPrecipitation", "value", "parameterName"]), 10) || 0));
+      const popRaw = pickField(f, ["ProbabilityOfPrecipitation", "value", "parameterName"]);
+      const pop = parsePop(popRaw);
       return {
         start,
         end: periodEnd(t),
@@ -297,7 +308,7 @@
       const f = fieldBag(t);
       const g = (arr) => covering(arr, start);
       const popRaw = pickField(f, ["ProbabilityOfPrecipitation", "parameterName", "value"]);
-      const pop = Math.max(0, Math.min(100, parseInt(popRaw, 10) || 0));
+      const pop = parsePop(popRaw);
       const wx = g(wxArr);
       const minT = g(minTArr);
       const maxT = g(maxTArr);
@@ -347,8 +358,8 @@
       for (const p of periods) {
         const hit = covering(popArr, p.start);
         if (hit) {
-          const v = parseInt(pickField(hit.f, ["ProbabilityOfPrecipitation", "parameterName", "value"]), 10);
-          if (!Number.isNaN(v)) p.pop = Math.max(0, Math.min(100, v));
+          const v = parsePop(pickField(hit.f, ["ProbabilityOfPrecipitation", "parameterName", "value"]));
+          if (v != null) p.pop = v;
         }
       }
     }
@@ -379,7 +390,7 @@
       return {
         start,
         end: periodEnd(t),
-        pop: Math.max(0, Math.min(100, parseInt(pickField(f, ["parameterName", "ProbabilityOfPrecipitation", "value"]), 10) || 0)),
+        pop: parsePop(pickField(f, ["parameterName", "ProbabilityOfPrecipitation", "value"])),
         wx: wx ? pickField(wx.f, ["parameterName", "Weather", "value"]) : "",
         wxCode: wx ? pickField(wx.f, ["parameterValue", "WeatherCode"]) : "",
         minT: minT ? pickField(minT.f, ["parameterName", "MinTemperature", "value"]) : "",
@@ -507,38 +518,48 @@
         at: n ? String(Math.round(at / n)) : h.at
       };
     });
-    const slots3h = (base.slots3h || []).map((p, i) => {
-      let pop = 0, n = 0;
-      let wx = p.wx;
-      for (const town of towns) {
-        const q = town.slots3h[i];
-        if (!q) continue;
-        pop += q.pop; n++;
-        if (q.wx) wx = q.wx;
-      }
-      return { ...p, pop: n ? Math.round(pop / n) : p.pop, wx };
-    });
-    const weekly = (base.weekly || []).map((p, i) => {
-      let pop = 0, n = 0, minT = 99, maxT = -99;
-      let wx = p.wx;
-      for (const town of towns) {
-        const q = town.weekly[i];
-        if (!q) continue;
-        pop += q.pop; n++;
-        if (q.wx) wx = q.wx;
-        const a = parseInt(q.minT, 10); const b = parseInt(q.maxT, 10);
-        if (!Number.isNaN(a)) minT = Math.min(minT, a);
-        if (!Number.isNaN(b)) maxT = Math.max(maxT, b);
-      }
-      return {
-        ...p,
-        pop: n ? Math.round(pop / n) : p.pop,
-        wx,
-        minT: minT === 99 ? p.minT : String(minT),
-        maxT: maxT === -99 ? p.maxT : String(maxT)
-      };
-    });
+    const slots3h = avgSlotsByStart(towns, "slots3h");
+    const weekly = avgSlotsByStart(towns, "weekly");
     return { name: countyName, hourly, slots3h, weekly };
+  }
+
+  function avgSlotsByStart(towns, key) {
+    const byStart = new Map();
+    for (const town of towns) {
+      for (const p of town[key] || []) {
+        if (!p?.start) continue;
+        if (!byStart.has(p.start)) byStart.set(p.start, []);
+        byStart.get(p.start).push(p);
+      }
+    }
+    return [...byStart.entries()]
+      .sort((a, b) => toMs(a[0]) - toMs(b[0]))
+      .map(([, arr]) => {
+        const base = { ...arr[0] };
+        let popSum = 0;
+        let n = 0;
+        let wx = base.wx;
+        let minT = 99;
+        let maxT = -99;
+        for (const q of arr) {
+          if (q.pop != null && !Number.isNaN(q.pop)) {
+            popSum += q.pop;
+            n++;
+          }
+          if (q.wx) wx = q.wx;
+          const a = parseInt(q.minT, 10);
+          const b = parseInt(q.maxT, 10);
+          if (!Number.isNaN(a)) minT = Math.min(minT, a);
+          if (!Number.isNaN(b)) maxT = Math.max(maxT, b);
+        }
+        return {
+          ...base,
+          pop: n ? Math.round(popSum / n) : null,
+          wx,
+          minT: key === "weekly" ? (minT === 99 ? base.minT : String(minT)) : base.minT,
+          maxT: key === "weekly" ? (maxT === -99 ? base.maxT : String(maxT)) : base.maxT
+        };
+      });
   }
 
   function resolvePack(countyName, townName) {
@@ -571,30 +592,6 @@
     const t = toMs(`${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`);
     if (Number.isNaN(t)) return false;
     return t >= s && t < e;
-  }
-
-  /** 精確涵蓋 → 否則用當日最早／最晚時段回填（補滿已過小時） */
-  function slotForHour(list, dayOffset, hour) {
-    if (!list || !list.length) return null;
-    const exact = list.find((p) => coversHour(p, dayOffset, hour));
-    if (exact) return exact;
-
-    const overlapping = list.filter((p) => {
-      for (let h = 0; h < 24; h++) {
-        if (coversHour(p, dayOffset, h)) return true;
-      }
-      return false;
-    });
-    const pool = overlapping.length ? overlapping : list;
-    const targetDay = addDaysKey(todayKey(), dayOffset);
-    const hourMs = toMs(`${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`);
-    const ranked = pool.slice().sort((a, b) => toMs(a.start) - toMs(b.start));
-    const first = ranked[0];
-    const last = ranked[ranked.length - 1];
-    if (!Number.isNaN(hourMs) && hourMs < toMs(first.start)) return first;
-    const lastEnd = last.end ? toMs(last.end) : toMs(last.start) + 3 * 3600 * 1000;
-    if (!Number.isNaN(hourMs) && hourMs >= lastEnd) return last;
-    return pickPeriod(pool, dayOffset, hour);
   }
 
   function hourPointFor(hourly, targetDay, hour) {
@@ -630,21 +627,19 @@
     const out = [];
     for (let h = 0; h < 24; h++) {
       const hourIsoGuess = `${targetDay}T${String(h).padStart(2, "0")}:00:00+08:00`;
+      // 氣溫可回填；降雨機率只接受官方時段真正涵蓋的小時（不虛構）
       const hourPoint = hourPointFor(pack.hourly || [], targetDay, h);
-      const slot3 = slotForHour(pack.slots3h || [], dayOffset, h);
-      const slot12 = slotForHour(pack.weekly || [], dayOffset, h);
-      const covered3 = (pack.slots3h || []).some((p) => coversHour(p, dayOffset, h));
-      const covered12 = (pack.weekly || []).some((p) => coversHour(p, dayOffset, h));
-      const pop = slot3 ? slot3.pop : (slot12 ? slot12.pop : 0);
+      const slot3 = (pack.slots3h || []).find((p) => coversHour(p, dayOffset, h));
+      const slot12 = (pack.weekly || []).find((p) => coversHour(p, dayOffset, h));
+      const popSlot = slot3 || slot12 || null;
+      const pop = popSlot && popSlot.pop != null ? popSlot.pop : null;
       let src = "—";
-      if (covered3) src = "3h";
-      else if (covered12) src = "12h";
-      else if (slot3) src = "3h~";
-      else if (slot12) src = "12h~";
+      if (slot3 && slot3.pop != null) src = "3h";
+      else if (slot12 && slot12.pop != null) src = "12h";
       else if (hourPoint) src = "1h";
       out.push({
         hour: h,
-        start: hourPoint?.start || slot3?.start || slot12?.start || hourIsoGuess,
+        start: hourPoint?.start || popSlot?.start || hourIsoGuess,
         pop,
         t: hourPoint?.t || slot3?.t || slot12?.t || "",
         td: hourPoint?.td || slot3?.td || slot12?.td || "",
@@ -716,15 +711,14 @@
   }
 
   function dayOutlook(periods, dayOffset) {
-    // periods 可能是 3h 或 12h；優先用傳入，否則由外部 hourlySeries 聚合
     const targetDay = addDaysKey(todayKey(), dayOffset);
-    const list = (periods || []).filter((p) => dayKey(p.start) === targetDay);
-    if (!list.length) return { maxPop: 0, avgPop: 0, wx: "—", minT: "—", maxT: "—", count: 0, periods: [] };
+    const list = (periods || []).filter((p) => dayKey(p.start) === targetDay && p.pop != null);
+    if (!list.length) return { maxPop: null, avgPop: null, wx: "—", minT: "—", maxT: "—", count: 0, periods: [] };
     let maxPop = 0;
     let sum = 0;
     let minT = 99;
     let maxT = -99;
-    let wx = list[0].wx;
+    let wx = list[0].wx || "—";
     for (const p of list) {
       maxPop = Math.max(maxPop, p.pop);
       sum += p.pop;
@@ -748,15 +742,17 @@
   function dayOutlookFromPack(countyName, townName, dayOffset) {
     const pack = resolvePack(countyName, townName);
     const series = hourlySeries(countyName, townName, dayOffset);
-    const hasData = series.some((h) => h.resolution !== "—");
-    if (!hasData && !(pack.weekly || []).length) {
-      return { maxPop: 0, avgPop: 0, wx: "—", minT: "—", maxT: "—", count: 0, periods: [], peakHour: 12 };
+    const popHours = series.filter((h) => h.pop != null);
+    const weeklyDay = dayOutlook(pack.weekly, dayOffset);
+    const slotsDay = dayOutlook(pack.slots3h, dayOffset);
+    if (!popHours.length && !weeklyDay.count && !slotsDay.count) {
+      return { maxPop: null, avgPop: null, wx: "—", minT: "—", maxT: "—", count: 0, periods: [], peakHour: 12, resolution: "—" };
     }
     let maxPop = 0;
     let sum = 0;
     let peakHour = 12;
     let wx = "—";
-    for (const h of series) {
+    for (const h of popHours) {
       sum += h.pop;
       if (h.pop > maxPop) {
         maxPop = h.pop;
@@ -764,20 +760,18 @@
         if (h.wx) wx = h.wx;
       } else if (h.pop === maxPop && h.wx) wx = h.wx;
     }
-    const weeklyDay = dayOutlook(pack.weekly, dayOffset);
-    const slotsDay = dayOutlook(pack.slots3h, dayOffset);
+    const candidates = [popHours.length ? maxPop : null, weeklyDay.maxPop, slotsDay.maxPop].filter((v) => v != null);
     return {
-      maxPop: Math.max(maxPop, weeklyDay.maxPop, slotsDay.maxPop),
-      avgPop: Math.round(sum / 24),
-      wx: wx !== "—" ? wx : (slotsDay.wx !== "—" ? slotsDay.wx : weeklyDay.wx),
+      maxPop: candidates.length ? Math.max(...candidates) : null,
+      avgPop: popHours.length ? Math.round(sum / popHours.length) : (slotsDay.avgPop ?? weeklyDay.avgPop),
+      wx: wx !== "—" ? wx : (slotsDay.wx || weeklyDay.wx || "—"),
       minT: weeklyDay.minT !== "—" ? weeklyDay.minT : "—",
       maxT: weeklyDay.maxT !== "—" ? weeklyDay.maxT : "—",
-      count: series.filter((h) => h.resolution !== "—").length,
-      periods: pack.slots3h.filter((p) => dayKey(p.start) === addDaysKey(todayKey(), dayOffset)).length
-        ? pack.slots3h.filter((p) => dayKey(p.start) === addDaysKey(todayKey(), dayOffset))
-        : pack.weekly.filter((p) => dayKey(p.start) === addDaysKey(todayKey(), dayOffset)),
+      count: popHours.length || slotsDay.count || weeklyDay.count,
+      periods: slotsDay.periods.length ? slotsDay.periods : weeklyDay.periods,
       peakHour,
-      resolution: pack.slots3h.some((p) => dayKey(p.start) === addDaysKey(todayKey(), dayOffset)) ? "3h" : "12h"
+      resolution: popHours.some((h) => h.resolution === "3h") || slotsDay.count ? "3h"
+        : popHours.some((h) => h.resolution === "12h") || weeklyDay.count ? "12h" : "—"
     };
   }
 

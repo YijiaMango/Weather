@@ -660,7 +660,7 @@
           `<div class="wd">${wd}</div>` +
           `<div class="md">${md}</div>` +
           `<div class="mm">${ready ? (outlook.wx || "—") : "—"}</div>` +
-          `<div class="pp">${ready ? outlook.maxPop + "%" : "—"}</div>`;
+          `<div class="pp">${ready && outlook.maxPop != null ? outlook.maxPop + "%" : "—"}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
           if (ready) currentHour = dailyOutlook(day).peakHour ?? 12;
@@ -1098,7 +1098,7 @@
       }
 
       document.getElementById("valWx").textContent = data.wx || "—";
-      document.getElementById("valPop").textContent = `${data.pop} %`;
+      document.getElementById("valPop").textContent = data.pop != null ? `${data.pop} %` : "—";
       document.getElementById("valT").textContent = deg(data.t);
       document.getElementById("valAt").textContent = deg(data.at);
       document.getElementById("valMinMax").textContent =
@@ -1121,7 +1121,10 @@
 
       hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區（官方）" : "目前層級：縣市（官方）";
 
-      if (data.pop >= 70) {
+      if (data.pop == null) {
+        badge.className = "badge badge-none";
+        badge.textContent = "無此時段";
+      } else if (data.pop >= 70) {
         badge.className = "badge badge-high";
         badge.textContent = "高降雨機率";
       } else if (data.pop >= 40) {
@@ -1137,7 +1140,9 @@
 
       advice.textContent = data.desc
         ? `【中央氣象署】${name}｜${data.desc}`
-        : `【中央氣象署】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%`;
+        : data.pop != null
+          ? `【中央氣象署】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%`
+          : `【中央氣象署】${name}｜此時段尚無官方降雨機率（近程預報通常從發布時刻起算）`;
     }
 
     async function enterCounty(countyFeature, fit = true) {
@@ -1414,12 +1419,12 @@
       }
 
       const hourlyData = activeHourlySeries(currentDayOffset);
-      const hasAny = hourlyData.some((d) => d.resolution !== "—");
+      const hasAny = hourlyData.some((d) => d.pop != null || d.resolution === "3h" || d.resolution === "12h");
       if (!hasAny) {
         chartCtx.fillStyle = "#64748b";
         chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
         chartCtx.textAlign = "center";
-        chartCtx.fillText("此日尚無官方時段資料（或仍在載入）", w / 2, h / 2);
+        chartCtx.fillText("此日尚無官方降雨機率時段（或仍在載入）", w / 2, h / 2);
         return;
       }
 
@@ -1436,17 +1441,17 @@
       const slotWidth = chartW / 24;
       const barWidth = slotWidth * 0.62;
 
-      // 降雨機率：低綠 → 中藍 → 高紫
+      // 降雨機率：低綠 → 中藍 → 高紫（僅官方有涵蓋的小時）
       function popBarColor(pop, active) {
         const t = Math.max(0, Math.min(1, pop / 100));
         let r, g, b;
         if (t < 0.5) {
-          const u = t / 0.5; // 綠 #22c55e → 藍 #3b82f6
+          const u = t / 0.5;
           r = Math.round(34 + (59 - 34) * u);
           g = Math.round(197 + (130 - 197) * u);
           b = Math.round(94 + (246 - 94) * u);
         } else {
-          const u = (t - 0.5) / 0.5; // 藍 #3b82f6 → 紫 #7c3aed
+          const u = (t - 0.5) / 0.5;
           r = Math.round(59 + (124 - 59) * u);
           g = Math.round(130 + (58 - 130) * u);
           b = Math.round(246 + (237 - 246) * u);
@@ -1456,19 +1461,23 @@
       }
 
       hourlyData.forEach((d, hr) => {
-        const barH = Math.min(chartH, (d.pop / 100) * chartH);
         const x = paddingLeft + hr * slotWidth + (slotWidth - barWidth) / 2;
-        const y = 10 + chartH - barH;
         const active = hr === currentHour;
-        const filledBack = String(d.resolution || "").endsWith("~");
-        chartCtx.fillStyle = popBarColor(d.pop, active);
-        if (filledBack && !active) chartCtx.globalAlpha = 0.45;
-        chartCtx.fillRect(x, y, barWidth, Math.max(0, barH));
-        chartCtx.globalAlpha = 1;
-        if (active) {
-          chartCtx.strokeStyle = "#f8fafc";
-          chartCtx.lineWidth = 1.5;
-          chartCtx.strokeRect(x, y, barWidth, Math.max(1, barH));
+        if (d.pop != null) {
+          const barH = Math.min(chartH, (d.pop / 100) * chartH);
+          const y = 10 + chartH - barH;
+          chartCtx.fillStyle = popBarColor(d.pop, active);
+          chartCtx.fillRect(x, y, barWidth, Math.max(d.pop === 0 ? 1 : 0, barH));
+          if (active) {
+            chartCtx.strokeStyle = "#f8fafc";
+            chartCtx.lineWidth = 1.5;
+            chartCtx.strokeRect(x, y, barWidth, Math.max(1, barH));
+          }
+        } else if (active) {
+          // 無官方 PoP 的小時：只標目前拉桿位置
+          chartCtx.strokeStyle = "rgba(248, 250, 252, 0.35)";
+          chartCtx.lineWidth = 1;
+          chartCtx.strokeRect(x, 10 + chartH - 4, barWidth, 4);
         }
 
         if (hr % 3 === 0) {
