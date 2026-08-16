@@ -150,7 +150,7 @@
       z-index: 1;
       pointer-events: none;
       overflow: hidden;
-      background: #080d1a; /* 換幀時也不露白 */
+      background: #080d1a;
     }
     #radarOverlayImg {
       position: absolute;
@@ -160,8 +160,8 @@
       opacity: 0;
       image-rendering: auto;
       display: none;
-      /* 一律深色處理：白底官圖不會閃白 */
-      filter: invert(1) hue-rotate(180deg) brightness(0.88) contrast(1.08);
+      /* SVG 著色器：深色夜視雷達風格 */
+      filter: url(#radarNightStyle);
       transition: opacity 0.12s ease;
     }
     canvas#mapCanvas {
@@ -397,6 +397,38 @@
   </style>
 </head>
 <body>
+  <!-- 雷達夜視著色器（SVG filter，不需 WebGL／CORS） -->
+  <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="radarNightStyle" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+        <!-- 1) 反相：白底→深色 -->
+        <feColorMatrix type="matrix" values="
+          -1 0 0 0 1
+           0 -1 0 0 1
+           0 0 -1 0 1
+           0 0 0 1 0" result="inv"/>
+        <!-- 2) 色相回正 -->
+        <feColorMatrix in="inv" type="hueRotate" values="180" result="hue"/>
+        <!-- 3) 對比／壓暗背景 -->
+        <feComponentTransfer in="hue" result="contrast">
+          <feFuncR type="linear" slope="1.22" intercept="-0.08"/>
+          <feFuncG type="linear" slope="1.28" intercept="-0.06"/>
+          <feFuncB type="linear" slope="1.18" intercept="-0.1"/>
+          <feFuncA type="linear" slope="1" intercept="0"/>
+        </feComponentTransfer>
+        <!-- 4) 映成青綠色夜視回波 -->
+        <feColorMatrix in="contrast" type="matrix" values="
+          0.15 0.25 0.10 0 0.02
+          0.05 0.90 0.25 0 0.04
+          0.35 0.45 0.95 0 0.08
+          0    0    0    0.95 0" result="tone"/>
+        <!-- 5) 輕微發光 -->
+        <feGaussianBlur in="tone" stdDeviation="0.6" result="blur"/>
+        <feBlend in="tone" in2="blur" mode="screen"/>
+      </filter>
+    </defs>
+  </svg>
+
   <div class="app-container">
     <div class="top-bar">
       <div>
@@ -812,13 +844,15 @@
       initRadarOverlay();
     }
 
-    // —— 即時雷達疊圖（深色／透明底；與拉桿同步）——
-    const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
+    // —— 即時雷達疊圖（3600 高解析＋SVG 夜視著色）——
+    const RADAR_GEO_NEAR = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
+    const RADAR_GEO_WIDE = { lon0: 115.0, lon1: 126.5, lat0: 17.75, lat1: 29.25 };
+    let radarGeo = RADAR_GEO_NEAR;
     const RADAR_STEPS = 18;
     let radarStep = RADAR_STEPS;
     const radarCache = new Map();
     let radarLatestMs = 0;
-    let radarClearUrl = ""; // O-A0058-006 透明底（最新幀）
+    let radarClearUrl = "";
 
     function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -836,7 +870,8 @@
     }
 
     function radarUrl(stamp) {
-      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_1000_${stamp}.png`;
+      // 3600×3600 高解析（對齊較大範圍）
+      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_3600_${stamp}.png`;
     }
 
     function formatRadarLabel(ms) {
@@ -857,7 +892,7 @@
           radarCache.set(stamp, val);
           resolve(val);
         };
-        const timer = setTimeout(() => finish("fail"), 6000);
+        const timer = setTimeout(() => finish("fail"), 8000);
         img.onload = () => finish(img);
         img.onerror = () => finish("fail");
         img.src = radarUrl(stamp);
@@ -868,6 +903,7 @@
 
     async function loadClearRadarLatest() {
       try {
+        // 鄰近透明 3600：台灣範圍像素密度最高
         const pack = await CWA.loadRadar("near_clear");
         radarClearUrl = pack.rawUrl || pack.imageUrl;
         if (pack.obsTime) {
@@ -905,19 +941,20 @@
       const w = mapCanvas.width;
       const h = mapCanvas.height;
       if (!w || !h) return;
-      const tl = project(RADAR_GEO.lon0, RADAR_GEO.lat1, w, h);
-      const br = project(RADAR_GEO.lon1, RADAR_GEO.lat0, w, h);
+      const g = radarGeo;
+      const tl = project(g.lon0, g.lat1, w, h);
+      const br = project(g.lon1, g.lat0, w, h);
       img.style.left = `${tl.x}px`;
       img.style.top = `${tl.y}px`;
       img.style.width = `${br.x - tl.x}px`;
       img.style.height = `${br.y - tl.y}px`;
     }
 
-    function showRadarSrc(src) {
+    function showRadarSrc(src, geo) {
       const img = document.getElementById("radarOverlayImg");
       if (!img || !src) return;
+      if (geo) radarGeo = geo;
       img.style.display = "block";
-      // 先藏起來再換 src，避免白底未濾鏡的一幀
       const reveal = () => {
         layoutRadarOverlay();
         img.style.opacity = "0.92";
@@ -930,7 +967,6 @@
       img.setAttribute("data-radar-src", src);
       img.onload = reveal;
       img.onerror = () => { img.style.opacity = "0"; };
-      // 用新 Image 預載完成後再賦值，進一步消掉閃白
       const pre = new Image();
       pre.onload = () => {
         if (img.getAttribute("data-radar-src") !== src) return;
@@ -946,10 +982,9 @@
       const token = ++radarApplyToken;
       radarStep = Math.max(0, Math.min(RADAR_STEPS, step));
 
-      // 最新幀優先透明底（同樣走深色濾鏡，色彩仍可辨）
       if (radarStep === RADAR_STEPS && radarClearUrl) {
         const bust = `${radarClearUrl}${radarClearUrl.includes("?") ? "&" : "?"}t=${radarLatestMs || Date.now()}`;
-        showRadarSrc(bust);
+        showRadarSrc(bust, RADAR_GEO_NEAR);
         return;
       }
 
@@ -963,7 +998,7 @@
       if (asset === "fail" || !asset) {
         for (let s = radarStep + 1; s <= RADAR_STEPS; s++) {
           if (s === RADAR_STEPS && radarClearUrl) {
-            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`);
+            showRadarSrc(`${radarClearUrl}?t=${radarLatestMs || Date.now()}`, RADAR_GEO_NEAR);
             radarStep = s;
             return;
           }
@@ -978,7 +1013,8 @@
       }
       if (token !== radarApplyToken) return;
       if (asset && asset !== "fail") {
-        showRadarSrc(asset.src || radarUrl(stamp));
+        // 歷史 3600 圖對齊大範圍地理框
+        showRadarSrc(asset.src || radarUrl(stamp), RADAR_GEO_WIDE);
       }
     }
 
