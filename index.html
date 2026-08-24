@@ -120,6 +120,7 @@
       grid-template-columns: 1fr 380px;
       gap: 16px;
     }
+    .location-card { grid-column: 1 / -1; }
     .map-stack {
       display: flex;
       flex-direction: column;
@@ -132,7 +133,7 @@
       .canvas-container { order: 1; }
       .timeline-card { order: 2; }
       .info-panel { order: 3; }
-      .location-card { order: 4; }
+      .location-card { order: 4; grid-column: auto; }
     }
     .canvas-container {
       position: relative;
@@ -208,6 +209,10 @@
       background: rgba(255, 255, 255, 0.06);
       column-gap: 1px;
       row-gap: 1px;
+    }
+    @media (min-width: 821px) {
+      .stat-block { grid-template-columns: repeat(4, 1fr); }
+      .stat-block .metric-box.span2 { grid-column: span 2; }
     }
     .stat-block .metric-box {
       background: #0f172a;
@@ -424,23 +429,41 @@
 
     <div class="main-grid">
       <div class="map-stack">
-      <div class="canvas-container" id="canvasWrapper">
-        <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
-        <canvas id="mapCanvas"></canvas>
+        <div class="canvas-container" id="canvasWrapper">
+          <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
+          <canvas id="mapCanvas"></canvas>
+        </div>
+
+        <div class="timeline-card">
+          <div class="time-slider-wrapper">
+            <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
+            <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
+            <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
+          </div>
+          <canvas id="chartCanvas"></canvas>
+          <div class="week-strip" id="weekStrip"></div>
+          <div class="chart-legend">
+            <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+            <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+            <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
+          </div>
+        </div>
       </div>
 
-      <div class="timeline-card">
-        <div class="time-slider-wrapper">
-          <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
-          <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
-          <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
-        </div>
-        <canvas id="chartCanvas"></canvas>
-        <div class="week-strip" id="weekStrip"></div>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
-          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
+      <div class="info-panel">
+        <div class="card windy-card" style="flex: 1;">
+          <div class="webcam-frame" id="webcamFrame">
+            <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
+          </div>
+          <div class="windy-tabs">
+            <button type="button" data-overlay="rain" class="active">雨</button>
+            <button type="button" data-overlay="wind">風</button>
+            <button type="button" data-overlay="pressure">氣壓</button>
+            <button type="button" data-overlay="radar">雷達</button>
+          </div>
+          <div class="windy-map-wrap">
+            <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
+          </div>
         </div>
       </div>
 
@@ -477,24 +500,6 @@
         </div>
         <div class="hint" id="levelHint" style="margin-top:10px;">目前層級：縣市總覽</div>
         <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; margin-top: 6px;" id="weatherAdvice"></div>
-      </div>
-      </div>
-
-      <div class="info-panel">
-        <div class="card windy-card" style="flex: 1;">
-          <div class="webcam-frame" id="webcamFrame">
-            <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
-          </div>
-          <div class="windy-tabs">
-            <button type="button" data-overlay="rain" class="active">雨</button>
-            <button type="button" data-overlay="wind">風</button>
-            <button type="button" data-overlay="pressure">氣壓</button>
-            <button type="button" data-overlay="radar">雷達</button>
-          </div>
-          <div class="windy-map-wrap">
-            <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
-          </div>
-        </div>
       </div>
     </div>
   </div>
