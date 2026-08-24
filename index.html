@@ -201,28 +201,24 @@
     .stat-block {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      margin-top: 10px;
+      margin-top: 8px;
       border: 1px solid var(--border);
       border-radius: 10px;
       overflow: hidden;
-      background: #0f172a;
+      background: rgba(255, 255, 255, 0.06);
+      column-gap: 1px;
+      row-gap: 1px;
     }
     .stat-block .metric-box {
-      background: transparent;
-      padding: 10px 12px;
+      background: #0f172a;
+      padding: 6px 8px;
       border-radius: 0;
       border: 0;
-      border-right: 1px solid rgba(255, 255, 255, 0.06);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
-    .stat-block .metric-box:nth-child(2n) { border-right: 0; }
-    .stat-block .metric-box.span2 {
-      grid-column: 1 / -1;
-      border-right: 0;
-    }
-    .metric-label { font-size: 0.75rem; color: var(--text-sub); }
-    .metric-value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
-    .metric-value.sm { font-size: 0.92rem; line-height: 1.35; font-weight: 600; }
+    .stat-block .metric-box.span2 { grid-column: 1 / -1; }
+    .metric-label { font-size: 0.68rem; color: var(--text-sub); line-height: 1.2; }
+    .metric-value { font-size: 1rem; font-weight: 600; margin-top: 1px; }
+    .metric-value.sm { font-size: 0.82rem; line-height: 1.25; font-weight: 600; }
     .badge {
       display: inline-block;
       padding: 3px 8px;
@@ -455,13 +451,13 @@
         </div>
         <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 2px;" id="coordsText">點擊縣市進入鄉鎮細分</div>
         <div class="stat-block" id="metricGrid">
-          <div class="metric-box"><div class="metric-label">鄰近雨量站</div><div class="metric-value sm" id="liveStation">—</div></div>
-          <div class="metric-box"><div class="metric-label">測站觀測</div><div class="metric-value sm" id="liveObsTime">—</div></div>
+          <div class="metric-box span2"><div class="metric-label">鄰近雨量站</div><div class="metric-value sm" id="liveStation">—</div></div>
+          <div class="metric-box span2"><div class="metric-label">測站觀測</div><div class="metric-value sm" id="liveObsTime">—</div></div>
           <div class="metric-box"><div class="metric-label">近 10 分</div><div class="metric-value" id="liveRain10">—</div></div>
           <div class="metric-box"><div class="metric-label">近 1 小時</div><div class="metric-value" id="liveRain1h">—</div></div>
           <div class="metric-box"><div class="metric-label">近 3 小時</div><div class="metric-value" id="liveRain3h">—</div></div>
           <div class="metric-box"><div class="metric-label">近 24 小時</div><div class="metric-value" id="liveRain24h">—</div></div>
-          <div class="metric-box"><div class="metric-label">天氣現象</div><div class="metric-value sm" id="valWx">—</div></div>
+          <div class="metric-box span2"><div class="metric-label">天氣現象</div><div class="metric-value sm" id="valWx">—</div></div>
           <div class="metric-box"><div class="metric-label">降雨機率</div><div class="metric-value" id="valPop">—</div></div>
           <div class="metric-box"><div class="metric-label">氣溫</div><div class="metric-value" id="valT">—</div></div>
           <div class="metric-box"><div class="metric-label">體感溫度</div><div class="metric-value" id="valAt">—</div></div>
@@ -469,7 +465,7 @@
           <div class="metric-box"><div class="metric-label">相對濕度</div><div class="metric-value" id="valRh">—</div></div>
           <div class="metric-box"><div class="metric-label">露點溫度</div><div class="metric-value" id="valTd">—</div></div>
           <div class="metric-box"><div class="metric-label">舒適度</div><div class="metric-value sm" id="valCi">—</div></div>
-          <div class="metric-box"><div class="metric-label">風向／風速</div><div class="metric-value sm" id="valWind">—</div></div>
+          <div class="metric-box span2"><div class="metric-label">風向／風速</div><div class="metric-value sm" id="valWind">—</div></div>
           <div class="metric-box"><div class="metric-label">紫外線</div><div class="metric-value sm" id="valUvi">—</div></div>
           <div class="metric-box"><div class="metric-label">模式近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
           <div class="metric-box"><div class="metric-label">模式氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
