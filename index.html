@@ -166,12 +166,6 @@
         object-fit: cover;
         flex: none;
       }
-      .windy-map-wrap {
-        flex: none;
-        width: 100%;
-        height: auto;
-        aspect-ratio: 16 / 9;
-      }
       .location-card { order: 4; grid-column: auto; }
     }
     .canvas-container {
@@ -182,24 +176,46 @@
       height: 100%;
       min-height: 0;
     }
-    #radarOverlayLayer {
+    #windyUnderlay {
       position: absolute;
       inset: 0;
       z-index: 1;
-      pointer-events: none;
       overflow: hidden;
+      pointer-events: none;
       background: #080d1a;
     }
-    #radarOverlayImg {
+    #windyUnderlay iframe {
       position: absolute;
       left: 0;
       top: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
       transform-origin: 0 0;
-      opacity: 0.9;
-      image-rendering: auto;
-      display: none;
-      /* 官方圖＋負片，不再做其他調色／混色 */
-      filter: invert(1);
+      pointer-events: none;
+    }
+    #windyUnderlay.is-embed iframe {
+      height: calc(100% + 66px);
+    }
+    .windy-layer-bar {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      z-index: 4;
+      display: flex;
+      gap: 4px;
+      pointer-events: auto;
+    }
+    .windy-layer-bar button {
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.82);
+    }
+    .windy-layer-bar button.on {
+      border-color: #38bdf8;
+      color: #38bdf8;
     }
     canvas#mapCanvas {
       position: relative;
@@ -264,7 +280,6 @@
       flex-direction: column;
       height: 100%;
       min-height: 0;
-      gap: 8px;
     }
     .metric-label { font-size: 0.68rem; color: var(--text-sub); line-height: 1.2; }
     .metric-value { font-size: 1rem; font-weight: 600; margin-top: 1px; }
@@ -331,34 +346,21 @@
       margin-right: 4px;
     }
     .hint { font-size: 0.8rem; color: var(--text-sub); margin-top: 4px; }
-    .windy-map-wrap {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #080d1a;
-    }
-    .windy-map-wrap iframe {
-      width: 100%;
-      height: calc(100% + 66px);
-      border: 0;
-      display: block;
-    }
     .windy-credit {
       position: absolute;
       left: 8px;
       bottom: 8px;
-      z-index: 2;
+      z-index: 4;
       color: #e2e8f0;
       font-size: 0.72rem;
       font-weight: 700;
       text-decoration: none;
       text-shadow: 0 1px 3px #000;
+      pointer-events: auto;
     }
     .windy-credit:hover { color: #38bdf8; }
     .webcam-frame {
-      flex: 0 0 auto;
+      flex: 1 1 auto;
       margin-bottom: 0;
       border-radius: 10px;
       overflow: hidden;
@@ -527,8 +529,17 @@
     <div class="main-grid">
       <div class="map-stack">
         <div class="canvas-container" id="canvasWrapper">
-          <div id="radarOverlayLayer"><img id="radarOverlayImg" alt="雷達回波疊圖" /></div>
+          <div id="windyUnderlay">
+            <iframe id="windyMapFrame" title="Windy 天氣底圖"></iframe>
+          </div>
           <canvas id="mapCanvas"></canvas>
+          <a class="windy-credit" href="https://www.windy.com/" target="_blank" rel="noopener">Windy</a>
+          <div class="windy-layer-bar" id="windyLayerBar">
+            <button type="button" data-ov="rain">雨</button>
+            <button type="button" data-ov="wind">風</button>
+            <button type="button" data-ov="temp">溫</button>
+            <button type="button" data-ov="radar">雷達</button>
+          </div>
         </div>
 
       </div>
@@ -537,10 +548,6 @@
         <div class="card windy-card" style="flex: 1;">
           <div class="webcam-frame" id="webcamFrame">
             <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
-          </div>
-          <div class="windy-map-wrap">
-            <iframe id="windyMapFrame" title="Windy 模式圖"></iframe>
-            <a class="windy-credit" href="https://www.windy.com/" target="_blank" rel="noopener">Windy</a>
           </div>
         </div>
       </div>
@@ -584,11 +591,11 @@
       </div>
       <dl>
         <dt>資料來源</dt>
-        <dd>中央氣象署 Open Data（縣市 36h、鄉鎮 3 天／一週、自動雨量站）· 官網雷達 <code>CV1_TW_1000</code>（僅今天）· Windy Point Forecast（GFS）／公開 embed 地圖／webcam</dd>
+        <dd>中央氣象署 Open Data（縣市 36h、鄉鎮 3 天／一週、自動雨量站）· Windy 天氣底圖（無地名，對齊自製 Canvas）／Point Forecast（GFS）／webcam</dd>
         <dt>圖表</dt>
         <dd>數值有兩邊時取平均（氣溫／濕度／風速）。實心柱為氣象署降雨機率；半透明柱為該小時官方沒資料、改用 Windy GFS。綠線為氣溫。測站雨量為觀測，不與模式混算。</dd>
         <dt>地圖</dt>
-        <dd>行政區界來自 taiwan-atlas TopoJSON。雙擊切換定位／全台。</dd>
+        <dd>Web Mercator 世界地圖；台灣行政區界來自 taiwan-atlas TopoJSON。Windy 只當天氣底圖、不接手勢。雙擊切換定位／全台。</dd>
       </dl>
     </div>
   </div>
@@ -640,7 +647,11 @@
     }
 
     const OFFSHORE = new Set(["金門縣", "連江縣", "澎湖縣"]);
-    const MAINLAND_VIEW = { lon: 120.97, lat: 23.72, span: 3.55 };
+    const MAINLAND_VIEW = { lon: 120.97, lat: 23.72, zoom: 7.2 };
+    const TILE = 256;
+    const MAX_LAT = 85.05112878;
+    const MIN_ZOOM = 3;
+    const MAX_ZOOM = 12;
 
     function mainlandBBox() {
       const box = [Infinity, Infinity, -Infinity, -Infinity];
@@ -670,11 +681,23 @@
     const camera = {
       lon: MAINLAND_VIEW.lon,
       lat: MAINLAND_VIEW.lat,
-      span: MAINLAND_VIEW.span,
+      zoom: MAINLAND_VIEW.zoom,
       targetLon: MAINLAND_VIEW.lon,
       targetLat: MAINLAND_VIEW.lat,
-      targetSpan: MAINLAND_VIEW.span
+      targetZoom: MAINLAND_VIEW.zoom
     };
+
+    let worldLand = null;
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json")
+      .then((r) => r.json())
+      .then((topo) => { worldLand = topojson.feature(topo, topo.objects.land); })
+      .catch(() => {});
+
+    let windyOverlay = "rain";
+    let windyMode = "underlay"; // underlay | embed
+    let windyReady = false;
+    const windyEmbedView = { lon: MAINLAND_VIEW.lon, lat: MAINLAND_VIEW.lat, zoom: 7 };
+    let lastWindyMsg = "";
 
     const timeSlider = document.getElementById("timeSlider");
     const weekStrip = document.getElementById("weekStrip");
@@ -956,180 +979,6 @@
       } catch (err) {
         setDataBanner(`中央氣象署資料載入失敗：${err.message || err}`, true);
       }
-      initRadarOverlay();
-    }
-
-    // —— 官方雷達圖＋負片：僅「今天」顯示，拉桿對齊當日完整 0–23 時 ——
-    const RADAR_GEO = { lon0: 118.0, lon1: 124.0, lat0: 20.5, lat1: 26.5 };
-    const radarCache = new Map();
-    let radarLatestMs = 0;
-    let radarShownMs = 0;
-
-    function pad2(n) { return String(n).padStart(2, "0"); }
-
-    function floorRadarClock(ms = Date.now()) {
-      return Math.floor(ms / 600000) * 600000 - 10 * 60000;
-    }
-
-    function todayStartMs(from = Date.now()) {
-      const d = new Date(from);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0).getTime();
-    }
-
-    function stampFromMs(ms) {
-      const d = new Date(ms);
-      return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}`;
-    }
-
-    function radarUrl(stamp) {
-      return `https://www.cwa.gov.tw/Data/radar/CV1_TW_1000_${stamp}.png`;
-    }
-
-    function hideRadarOverlay() {
-      radarShownMs = 0;
-      const img = document.getElementById("radarOverlayImg");
-      if (!img) return;
-      img.style.display = "none";
-      img.removeAttribute("src");
-      img.onload = null;
-    }
-
-    function preloadRadarStamp(stamp) {
-      if (radarCache.has(stamp)) return radarCache.get(stamp);
-      const img = new Image();
-      const p = new Promise((resolve) => {
-        let done = false;
-        const finish = (val) => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          radarCache.set(stamp, val);
-          resolve(val);
-        };
-        const timer = setTimeout(() => finish("fail"), 6000);
-        img.onload = () => finish(img);
-        img.onerror = () => finish("fail");
-        img.src = radarUrl(stamp);
-      });
-      radarCache.set(stamp, p);
-      return p;
-    }
-
-    async function resolveRadarAsset(ms) {
-      const stamp = stampFromMs(ms);
-      let asset = radarCache.get(stamp);
-      if (asset instanceof Promise) asset = await asset;
-      if (!asset) asset = await preloadRadarStamp(stamp);
-      return { stamp, asset, ms };
-    }
-
-    async function findLatestRadarMs() {
-      let t = floorRadarClock();
-      for (let i = 0; i < 6; i++) {
-        const hit = await preloadRadarStamp(stampFromMs(t));
-        if (hit !== "fail") return t;
-        t -= 10 * 60000;
-      }
-      return floorRadarClock();
-    }
-
-    /** 預抓今天每個整點＋最新附近幾幀（不一次灌滿 144 張） */
-    function prefetchTodayRadar() {
-      if (!radarLatestMs) return;
-      const start = todayStartMs();
-      for (let h = 0; h < 24; h++) {
-        const ms = start + h * 3600000;
-        if (ms > radarLatestMs) break;
-        preloadRadarStamp(stampFromMs(ms));
-      }
-      for (let i = 0; i < 6; i++) {
-        preloadRadarStamp(stampFromMs(radarLatestMs - i * 600000));
-      }
-    }
-
-    function layoutRadarOverlay() {
-      const img = document.getElementById("radarOverlayImg");
-      if (!img || img.style.display === "none" || !img.naturalWidth) return;
-      const w = mapCanvas.width;
-      const h = mapCanvas.height;
-      if (!w || !h) return;
-      const tl = project(RADAR_GEO.lon0, RADAR_GEO.lat1, w, h);
-      const br = project(RADAR_GEO.lon1, RADAR_GEO.lat0, w, h);
-      img.style.left = `${tl.x}px`;
-      img.style.top = `${tl.y}px`;
-      img.style.width = `${br.x - tl.x}px`;
-      img.style.height = `${br.y - tl.y}px`;
-    }
-
-    let radarApplyToken = 0;
-    async function applyRadarAtMs(wantMs) {
-      if (!radarLatestMs) return;
-      const token = ++radarApplyToken;
-      const start = todayStartMs();
-      let ms = Math.floor(wantMs / 600000) * 600000;
-      if (ms < start) ms = start;
-      if (ms > radarLatestMs) ms = radarLatestMs;
-
-      // 缺幀時：同小時內往後找 → 再往前找（最多 ±50 分）
-      let hit = null;
-      for (const dir of [1, -1]) {
-        for (let i = 0; i <= 5; i++) {
-          const t = ms + dir * i * 600000;
-          if (t < start || t > radarLatestMs) continue;
-          const r = await resolveRadarAsset(t);
-          if (token !== radarApplyToken) return;
-          if (r.asset && r.asset !== "fail") { hit = r; break; }
-        }
-        if (hit) break;
-      }
-      if (token !== radarApplyToken) return;
-      if (!hit) {
-        hideRadarOverlay();
-        return;
-      }
-
-      radarShownMs = hit.ms;
-      const img = document.getElementById("radarOverlayImg");
-      const src = hit.asset.src || radarUrl(hit.stamp);
-      img.style.display = "block";
-      if (img.getAttribute("src") !== src) {
-        img.onload = () => layoutRadarOverlay();
-        img.src = src;
-      } else {
-        layoutRadarOverlay();
-      }
-    }
-
-    async function syncRadarFromSharedSlider() {
-      // 非今天：官方沒有對應雲圖 → 不顯示
-      if (currentDayOffset !== 0) {
-        hideRadarOverlay();
-        return;
-      }
-      if (!radarLatestMs) return;
-      const now = new Date();
-      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), currentHour, 0, 0).getTime();
-      await applyRadarAtMs(target);
-    }
-
-    async function initRadarOverlay() {
-      try {
-        radarLatestMs = await findLatestRadarMs();
-        prefetchTodayRadar();
-        await syncRadarFromSharedSlider();
-        syncTimeOverlay();
-      } catch (err) {
-        console.warn("radar init failed", err);
-      }
-      setInterval(async () => {
-        try {
-          const prev = radarLatestMs;
-          radarLatestMs = await findLatestRadarMs();
-          if (radarLatestMs !== prev) prefetchTodayRadar();
-          await syncRadarFromSharedSlider();
-          syncTimeOverlay();
-        } catch (_) { /* ignore */ }
-      }, 60 * 1000);
     }
 
     function updateLiveRainPanel() {
@@ -1185,20 +1034,44 @@
       drawChart();
     }
 
-    function mapPxPerDeg(width, height, span = camera.span) {
-      return (Math.max(width, height) * 0.94) / span;
+    function clampZoom(z) {
+      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+    }
+
+    function mercX(lon) {
+      return ((lon + 180) % 360 + 360) % 360 / 360;
+    }
+
+    function mercY(lat) {
+      const clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
+      const s = Math.sin(clamped * Math.PI / 180);
+      return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
+    }
+
+    function lonFromMercX(x) {
+      return x * 360 - 180;
+    }
+
+    function latFromMercY(y) {
+      const n = Math.PI * (1 - 2 * y);
+      return 180 / Math.PI * Math.atan(Math.sinh(n));
+    }
+
+    function mapScale(zoom = camera.zoom) {
+      return TILE * 2 ** zoom;
     }
 
     function fitToBBox(b, pad = 1.08) {
-      const bw = Math.max(0.08, b[2] - b[0]);
-      const bh = Math.max(0.08, b[3] - b[1]);
-      camera.targetLon = (b[0] + b[2]) / 2;
-      camera.targetLat = (b[1] + b[3]) / 2;
       const wrap = document.getElementById("canvasWrapper");
       const W = Math.max(1, wrap?.clientWidth || mapCanvas.width || 400);
       const H = Math.max(1, wrap?.clientHeight || mapCanvas.height || 500);
-      const m = Math.max(W, H);
-      camera.targetSpan = Math.max(0.04, Math.min(0.94 * m * bw / W, 0.94 * m * bh / H) * pad);
+      const dx = Math.max(1e-8, Math.abs(mercX(b[2]) - mercX(b[0])));
+      const dy = Math.max(1e-8, Math.abs(mercY(b[1]) - mercY(b[3])));
+      const zx = Math.log2((W * 0.94) / (dx * TILE * pad));
+      const zy = Math.log2((H * 0.94) / (dy * TILE * pad));
+      camera.targetLon = (b[0] + b[2]) / 2;
+      camera.targetLat = (b[1] + b[3]) / 2;
+      camera.targetZoom = clampZoom(Math.min(zx, zy));
     }
 
     function refitCurrentView() {
@@ -1211,18 +1084,18 @@
     }
 
     function project(lon, lat, width, height) {
-      const k = mapPxPerDeg(width, height);
+      const s = mapScale();
       return {
-        x: width / 2 + (lon - camera.lon) * k,
-        y: height / 2 - (lat - camera.lat) * k
+        x: width / 2 + (mercX(lon) - mercX(camera.lon)) * s,
+        y: height / 2 + (mercY(lat) - mercY(camera.lat)) * s
       };
     }
 
     function unproject(x, y, width, height) {
-      const k = mapPxPerDeg(width, height);
+      const s = mapScale();
       return {
-        lon: camera.lon + (x - width / 2) / k,
-        lat: camera.lat - (y - height / 2) / k
+        lon: lonFromMercX(mercX(camera.lon) + (x - width / 2) / s),
+        lat: latFromMercY(mercY(camera.lat) + (y - height / 2) / s)
       };
     }
 
@@ -1253,10 +1126,14 @@
       return false;
     }
 
-    function drawGeom(ctx, geom, w, h) {
+    function appendGeom(ctx, geom, w, h) {
+      if (!geom) return;
+      if (geom.type === "GeometryCollection") {
+        for (const g of geom.geometries || []) appendGeom(ctx, g, w, h);
+        return;
+      }
       const polys = geom.type === "Polygon" ? [geom.coordinates]
         : geom.type === "MultiPolygon" ? geom.coordinates : [];
-      ctx.beginPath();
       for (const poly of polys) {
         for (let r = 0; r < poly.length; r++) {
           const ring = poly[r];
@@ -1268,6 +1145,11 @@
           ctx.closePath();
         }
       }
+    }
+
+    function drawGeom(ctx, geom, w, h) {
+      ctx.beginPath();
+      appendGeom(ctx, geom, w, h);
     }
 
     function updateBreadcrumb() {
@@ -1566,6 +1448,7 @@
       selectedTown = null;
       camera.targetLon = MAINLAND_VIEW.lon;
       camera.targetLat = MAINLAND_VIEW.lat;
+      camera.targetZoom = MAINLAND_VIEW.zoom;
       fitToBBox(mainlandBBox(), 1.06);
       updateInfoPanel();
       drawChart();
@@ -1618,17 +1501,77 @@
       box.appendChild(cap);
     }
 
-    function syncWindyMap(lat, lon) {
+    function mountWindyFrame(mode) {
+      const wrap = document.getElementById("windyUnderlay");
       const frame = document.getElementById("windyMapFrame");
       if (!frame || !window.WINDY) return;
-      const src = WINDY.embedMapUrl(lat, lon, "rain", forecastTargetMs());
+      windyMode = mode;
+      windyReady = mode === "embed";
+      wrap.classList.toggle("is-embed", mode === "embed");
+      const src = mode === "underlay"
+        ? WINDY.underlayUrl(camera.lon, camera.lat, windyOverlay, camera.zoom)
+        : WINDY.embedMapUrl(camera.lon, camera.lat, windyOverlay, forecastTargetMs(), camera.zoom);
       if (frame.getAttribute("src") !== src) frame.src = src;
+      windyEmbedView.lon = camera.lon;
+      windyEmbedView.lat = camera.lat;
+      windyEmbedView.zoom = Math.round(camera.zoom);
+      lastWindyMsg = "";
+    }
+
+    function layoutWindyUnderlay() {
+      const wrap = document.getElementById("canvasWrapper");
+      const frame = document.getElementById("windyMapFrame");
+      if (!wrap || !frame) return;
+      const w = wrap.clientWidth;
+      const h = wrap.clientHeight;
+      if (!w || !h) return;
+
+      if (windyMode === "underlay" && windyReady && frame.contentWindow) {
+        frame.style.transform = "none";
+        const msg = `${camera.lat.toFixed(5)}|${camera.lon.toFixed(5)}|${camera.zoom.toFixed(3)}|${windyOverlay}|${forecastTargetMs()}`;
+        if (msg !== lastWindyMsg) {
+          lastWindyMsg = msg;
+          frame.contentWindow.postMessage({
+            type: "windy-view",
+            lat: camera.lat,
+            lon: camera.lon,
+            zoom: camera.zoom,
+            overlay: windyOverlay,
+            timestamp: forecastTargetMs()
+          }, "*");
+        }
+        return;
+      }
+
+      const zI = windyEmbedView.zoom;
+      const scale = 2 ** (camera.zoom - zI);
+      const s = mapScale(camera.zoom);
+      const tx = w / 2 - scale * (w / 2) + (mercX(windyEmbedView.lon) - mercX(camera.lon)) * s;
+      const ty = h / 2 - scale * (h / 2) + (mercY(windyEmbedView.lat) - mercY(camera.lat)) * s;
+      frame.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+      const drift = Math.hypot(mercX(camera.lon) - mercX(windyEmbedView.lon), mercY(camera.lat) - mercY(windyEmbedView.lat)) * 256 * 2 ** zI;
+      if (Math.abs(camera.zoom - zI) > 0.65 || drift > Math.max(w, h) * 0.45) {
+        if (mapInteract.active) return;
+        windyEmbedView.lon = camera.lon;
+        windyEmbedView.lat = camera.lat;
+        windyEmbedView.zoom = Math.round(camera.zoom);
+        if (window.WINDY) {
+          const src = WINDY.embedMapUrl(camera.lon, camera.lat, windyOverlay, forecastTargetMs(), windyEmbedView.zoom);
+          if (frame.getAttribute("src") !== src) frame.src = src;
+        }
+      }
+    }
+
+    function syncWindyLayerButtons() {
+      document.querySelectorAll("#windyLayerBar button").forEach((btn) => {
+        btn.classList.toggle("on", btn.dataset.ov === windyOverlay);
+      });
     }
 
     async function refreshWindy() {
       if (!window.WINDY) return;
       const { lon, lat } = windyFocus();
-      syncWindyMap(lat, lon);
       try {
         await WINDY.loadPoint(lat, lon);
       } catch (_) { /* 面板改走氣象署；Windy 缺值就略過 */ }
@@ -1644,6 +1587,8 @@
         drawChart();
         updateInfoPanel();
       }
+      lastWindyMsg = "";
+      layoutWindyUnderlay();
     }
 
     function scheduleWindy() {
@@ -1670,11 +1615,19 @@
       if (!mapInteract.active) {
         camera.lon += (camera.targetLon - camera.lon) * 0.12;
         camera.lat += (camera.targetLat - camera.lat) * 0.12;
-        camera.span += (camera.targetSpan - camera.span) * 0.12;
+        camera.zoom += (camera.targetZoom - camera.zoom) * 0.12;
       } else {
         camera.targetLon = camera.lon;
         camera.targetLat = camera.lat;
-        camera.targetSpan = camera.span;
+        camera.targetZoom = camera.zoom;
+      }
+
+      if (worldLand) {
+        mapCtx.beginPath();
+        appendGeom(mapCtx, worldLand.geometry || worldLand, w, h);
+        mapCtx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+        mapCtx.lineWidth = 0.7;
+        mapCtx.stroke();
       }
 
       function drawLabel(text, x, y, opts = {}) {
@@ -1785,7 +1738,7 @@
         }
       }
 
-      layoutRadarOverlay();
+      layoutWindyUnderlay();
       requestAnimationFrame(drawMap);
     }
 
@@ -1959,7 +1912,7 @@
       originLat: 0,
       // pinch
       startDist: 0,
-      startSpan: 0,
+      startZoom: 0,
       startMidX: 0,
       startMidY: 0,
       originLonPinch: 0,
@@ -1986,19 +1939,17 @@
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     }
 
-    function zoomAt(x, y, nextSpan) {
-      const before = unproject(x, y, mapCanvas.width, mapCanvas.height);
-      camera.span = nextSpan;
-      camera.targetSpan = nextSpan;
-      const after = unproject(x, y, mapCanvas.width, mapCanvas.height);
-      camera.lon += before.lon - after.lon;
-      camera.lat += before.lat - after.lat;
+    function zoomAt(x, y, nextZoom) {
+      const w = mapCanvas.width;
+      const h = mapCanvas.height;
+      const before = unproject(x, y, w, h);
+      camera.zoom = nextZoom;
+      camera.targetZoom = nextZoom;
+      const after = unproject(x, y, w, h);
+      camera.lon = lonFromMercX(mercX(camera.lon) + mercX(before.lon) - mercX(after.lon));
+      camera.lat = latFromMercY(mercY(camera.lat) + mercY(before.lat) - mercY(after.lat));
       camera.targetLon = camera.lon;
       camera.targetLat = camera.lat;
-    }
-
-    function clampSpan(s) {
-      return Math.min(5.5, Math.max(0.04, s));
     }
 
     function beginPanFromPointers() {
@@ -2020,7 +1971,7 @@
       mapInteract.mode = "pinch";
       mapInteract.moved = true; // 雙指不觸發點選
       mapInteract.startDist = Math.max(1, pinchDist(a, b));
-      mapInteract.startSpan = camera.span;
+      mapInteract.startZoom = camera.zoom;
       mapInteract.startMidX = mid.x;
       mapInteract.startMidY = mid.y;
       mapInteract.originLonPinch = camera.lon;
@@ -2037,9 +1988,9 @@
       if (!mapInteract.moved) return;
       const w = mapCanvas.width;
       const h = mapCanvas.height;
-      const k = mapPxPerDeg(w, h);
-      camera.lon = mapInteract.originLon - dx / k;
-      camera.lat = mapInteract.originLat + dy / k;
+      const s = mapScale(camera.zoom);
+      camera.lon = lonFromMercX(mercX(mapInteract.originLon) - dx / s);
+      camera.lat = latFromMercY(mercY(mapInteract.originLat) - dy / s);
       camera.targetLon = camera.lon;
       camera.targetLat = camera.lat;
       hoverName = "";
@@ -2051,22 +2002,17 @@
       const [a, b] = pts;
       const mid = pinchMid(a, b);
       const dist = Math.max(1, pinchDist(a, b));
-      const scale = dist / mapInteract.startDist;
-      const nextSpan = clampSpan(mapInteract.startSpan / scale);
-
+      const nextZoom = clampZoom(mapInteract.startZoom + Math.log2(dist / mapInteract.startDist));
       const w = mapCanvas.width;
       const h = mapCanvas.height;
-      const k0 = mapPxPerDeg(w, h, mapInteract.startSpan);
-      const kn = mapPxPerDeg(w, h, nextSpan);
-      const lon0 = mapInteract.originLonPinch;
-      const lat0 = mapInteract.originLatPinch;
-      const anchorLon = lon0 + (mapInteract.startMidX - w / 2) / k0;
-      const anchorLat = lat0 - (mapInteract.startMidY - h / 2) / k0;
-
-      camera.span = nextSpan;
-      camera.targetSpan = nextSpan;
-      camera.lon = anchorLon - (mid.x - w / 2) / kn;
-      camera.lat = anchorLat + (mid.y - h / 2) / kn;
+      const s0 = mapScale(mapInteract.startZoom);
+      const sn = mapScale(nextZoom);
+      const ax = mercX(mapInteract.originLonPinch) + (mapInteract.startMidX - w / 2) / s0;
+      const ay = mercY(mapInteract.originLatPinch) + (mapInteract.startMidY - h / 2) / s0;
+      camera.zoom = nextZoom;
+      camera.targetZoom = nextZoom;
+      camera.lon = lonFromMercX(ax - (mid.x - w / 2) / sn);
+      camera.lat = latFromMercY(ay - (mid.y - h / 2) / sn);
       camera.targetLon = camera.lon;
       camera.targetLat = camera.lat;
       hoverName = "";
@@ -2187,7 +2133,7 @@
       e.preventDefault();
       const { x, y } = canvasCoords(e);
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
-      zoomAt(x, y, clampSpan(camera.span * factor));
+      zoomAt(x, y, clampZoom(camera.zoom - Math.log2(factor)));
     }, { passive: false });
 
     // 阻檔 iOS Safari 地圖區雙指縮放整頁
@@ -2202,7 +2148,30 @@
       updateInfoPanel();
       drawChart();
       drawMap();
+      lastWindyMsg = "";
       scheduleWindy();
+    });
+
+    document.getElementById("windyLayerBar").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-ov]");
+      if (!btn) return;
+      windyOverlay = btn.dataset.ov;
+      lastWindyMsg = "";
+      syncWindyLayerButtons();
+      if (windyMode === "embed") mountWindyFrame("embed");
+      else layoutWindyUnderlay();
+    });
+
+    window.addEventListener("message", (e) => {
+      const d = e.data;
+      if (!d || typeof d !== "object") return;
+      if (d.type === "windy-ready") {
+        windyReady = true;
+        lastWindyMsg = "";
+        layoutWindyUnderlay();
+      } else if (d.type === "windy-fail" && windyMode === "underlay") {
+        mountWindyFrame("embed");
+      }
     });
 
     function resizeCanvases() {
@@ -2224,9 +2193,11 @@
     }
     resizeCanvases();
     refitCurrentView();
-    camera.span = camera.targetSpan;
+    camera.zoom = camera.targetZoom;
     camera.lon = camera.targetLon;
     camera.lat = camera.targetLat;
+    syncWindyLayerButtons();
+    mountWindyFrame("underlay");
     syncTimeOverlay();
     drawMap();
     setInterval(() => {

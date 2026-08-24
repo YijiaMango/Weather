@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Windy underlay</title>
+  <style>
+    html, body, #windy {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #080d1a;
+    }
+    #logo,
+    #mobile-ovr-select,
+    #embed-zoom,
+    #bottom,
+    #progress-bar,
+    #plugins,
+    #search,
+    #open-in-app,
+    .leaflet-control-container,
+    .leaflet-marker-pane,
+    .leaflet-tooltip-pane,
+    .leaflet-popup-pane,
+    .leaflet-shadow-pane,
+    [data-plugin],
+    .rhpane,
+    #login,
+    #device-menu {
+      display: none !important;
+    }
+  </style>
+  <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+  <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
+</head>
+<body>
+  <div id="windy"></div>
+  <script>
+    const MAP_KEY = "ckb5xi8wIwXJ0bTD4cvJWxcRz4HeIQye";
+    const q = new URLSearchParams(location.search);
+    const start = {
+      lat: Number(q.get("lat")) || 23.72,
+      lon: Number(q.get("lon")) || 120.97,
+      zoom: Number(q.get("zoom")) || 6,
+      overlay: q.get("overlay") || "rain"
+    };
+
+    function ping(type, extra) {
+      try { parent.postMessage(Object.assign({ type }, extra || {}), "*"); } catch (_) {}
+    }
+
+    const failTimer = setTimeout(() => ping("windy-fail", { reason: "timeout" }), 9000);
+    window.addEventListener("error", () => ping("windy-fail", { reason: "error" }));
+
+    function stripUiAndLabels(map, store) {
+      try { store.set("pois", "empty"); } catch (_) {}
+      try { store.set("particlesAnim", store.get("overlay") === "wind" ? "on" : "off"); } catch (_) {}
+      map.dragging.disable();
+      map.touchZoom.disable();
+      map.scrollWheelZoom.disable();
+      map.doubleClickZoom.disable();
+      map.boxZoom.disable();
+      map.keyboard.disable();
+      if (map.tap) map.tap.disable();
+      map.options.zoomSnap = 0;
+      map.options.zoomDelta = 0.1;
+      map.eachLayer((layer) => {
+        const url = String(layer && layer._url || "");
+        if (layer instanceof L.TileLayer && !/overlay|radar|sat|forecast|weather/i.test(url)) {
+          map.removeLayer(layer);
+        }
+      });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png", {
+        subdomains: "abcd",
+        attribution: "",
+        opacity: 1
+      }).addTo(map).bringToBack();
+    }
+
+    windyInit({
+      key: MAP_KEY,
+      lat: start.lat,
+      lon: start.lon,
+      zoom: Math.round(start.zoom),
+      overlay: start.overlay,
+      level: "surface"
+    }, (api) => {
+      clearTimeout(failTimer);
+      const { map, store } = api;
+      stripUiAndLabels(map, store);
+      setTimeout(() => stripUiAndLabels(map, store), 400);
+      setTimeout(() => stripUiAndLabels(map, store), 1600);
+      ping("windy-ready");
+
+      window.addEventListener("message", (ev) => {
+        const d = ev.data;
+        if (!d || d.type !== "windy-view") return;
+        if (typeof d.lat === "number" && typeof d.lon === "number" && typeof d.zoom === "number") {
+          map.setView([d.lat, d.lon], d.zoom, { animate: false });
+        }
+        if (d.overlay && d.overlay !== store.get("overlay")) {
+          store.set("overlay", d.overlay);
+          try { store.set("particlesAnim", d.overlay === "wind" ? "on" : "off"); } catch (_) {}
+        }
+        if (typeof d.timestamp === "number") {
+          try { store.set("timestamp", d.timestamp); } catch (_) {}
+        }
+      });
+    });
+  </script>
+</body>
+</html>
