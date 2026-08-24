@@ -1386,7 +1386,7 @@
     function syncWindyMap(lat, lon) {
       const frame = document.getElementById("windyMapFrame");
       if (!frame || !window.WINDY) return;
-      const src = WINDY.embedMapUrl(lat, lon, windyOverlay);
+      const src = WINDY.embedMapUrl(lat, lon, windyOverlay, forecastTargetMs());
       if (frame.getAttribute("src") !== src) frame.src = src;
     }
 

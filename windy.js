@@ -132,7 +132,8 @@
     return cam;
   }
 
-  function embedMapUrl(lat, lon, overlay = "rain") {
+  function embedMapUrl(lat, lon, overlay = "rain", targetMs = Date.now()) {
+    const hoursAhead = Math.max(0, Math.min(240, Math.round((targetMs - Date.now()) / 36e5)));
     const q = new URLSearchParams({
       lat: lat.toFixed(3),
       lon: lon.toFixed(3),
@@ -142,7 +143,8 @@
       menu: "",
       message: "",
       marker: "true",
-      calendar: "now",
+      calendar: "in",
+      forecast: String(hoursAhead),
       pressure: overlay === "pressure" ? "true" : "",
       type: "map",
       location: "coordinates",
