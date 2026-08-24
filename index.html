@@ -580,7 +580,7 @@
       <div class="chart-legend">
         <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
         <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-        <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>Windy 推估</span>
+        <span><span class="dot" style="background:rgba(248,113,113,0.55);"></span>Windy 推估</span>
       </div>
       <dl>
         <dt>資料來源</dt>
@@ -1870,8 +1870,12 @@
       const slotWidth = chartW / 24;
       const barWidth = slotWidth * 0.62;
 
-      // 降雨機率：低綠 → 中藍 → 高紫（僅官方有涵蓋的小時）
-      function popBarColor(pop, active) {
+      // 降雨機率：低綠 → 中藍 → 高紫；推估欄用半透紅
+      function popBarColor(pop, active, estimate) {
+        if (estimate) {
+          const a = active ? 0.72 : 0.42;
+          return `rgba(248, 113, 113, ${a})`;
+        }
         const t = Math.max(0, Math.min(1, pop / 100));
         let r, g, b;
         if (t < 0.5) {
@@ -1895,9 +1899,9 @@
         if (d.pop != null) {
           const barH = Math.min(chartH, (d.pop / 100) * chartH);
           const y = 10 + chartH - barH;
-          chartCtx.fillStyle = popBarColor(d.pop, active);
-          if ((d.resolution === "windy" || d.resolution === "blend" || d.resolution === "wx") && !active) chartCtx.globalAlpha = 0.5;
-          else if (d.resolution === "cache" && !active) chartCtx.globalAlpha = 0.7;
+          const estimate = d.resolution === "windy" || d.resolution === "blend" || d.resolution === "wx";
+          chartCtx.fillStyle = popBarColor(d.pop, active, estimate);
+          if (d.resolution === "cache" && !active) chartCtx.globalAlpha = 0.7;
           chartCtx.fillRect(x, y, barWidth, Math.max(d.pop === 0 ? 1 : 0, barH));
           chartCtx.globalAlpha = 1;
           if (active) {
