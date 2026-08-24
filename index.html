@@ -781,7 +781,6 @@
       const hh = String(currentHour).padStart(2, "0");
       const label = document.getElementById("timeSliderLabel");
       if (label) label.textContent = `${hh}:00`;
-      return syncRadarFromSharedSlider();
     }
     // 延後到雷達／canvas 就緒後再 sync（見 init / resize）
     const mapCanvas = document.getElementById("mapCanvas");
@@ -1543,24 +1542,12 @@
         return;
       }
 
-      const zI = windyEmbedView.zoom;
+      const zI = windyEmbedView.zoom || Math.round(camera.zoom);
       const scale = 2 ** (camera.zoom - zI);
       const s = mapScale(camera.zoom);
       const tx = w / 2 - scale * (w / 2) + (mercX(windyEmbedView.lon) - mercX(camera.lon)) * s;
       const ty = h / 2 - scale * (h / 2) + (mercY(windyEmbedView.lat) - mercY(camera.lat)) * s;
       frame.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-
-      const drift = Math.hypot(mercX(camera.lon) - mercX(windyEmbedView.lon), mercY(camera.lat) - mercY(windyEmbedView.lat)) * 256 * 2 ** zI;
-      if (Math.abs(camera.zoom - zI) > 0.65 || drift > Math.max(w, h) * 0.45) {
-        if (mapInteract.active) return;
-        windyEmbedView.lon = camera.lon;
-        windyEmbedView.lat = camera.lat;
-        windyEmbedView.zoom = Math.round(camera.zoom);
-        if (window.WINDY) {
-          const src = WINDY.embedMapUrl(camera.lon, camera.lat, windyOverlay, forecastTargetMs(), windyEmbedView.zoom);
-          if (frame.getAttribute("src") !== src) frame.src = src;
-        }
-      }
     }
 
     function syncWindyLayerButtons() {
@@ -1588,7 +1575,8 @@
         updateInfoPanel();
       }
       lastWindyMsg = "";
-      layoutWindyUnderlay();
+      if (windyMode === "embed") mountWindyFrame("embed");
+      else layoutWindyUnderlay();
     }
 
     function scheduleWindy() {
@@ -1607,6 +1595,7 @@
     }
 
     function drawMap() {
+      try {
       const w = mapCanvas.width;
       const h = mapCanvas.height;
       mapCtx.clearRect(0, 0, w, h);
@@ -1647,6 +1636,8 @@
         for (const c of countyFC.features) {
           const isSel = selectedCounty && selectedCounty.properties.COUNTYNAME === c.properties.COUNTYNAME;
           drawGeom(mapCtx, c.geometry, w, h);
+          mapCtx.fillStyle = isSel ? "rgba(251, 191, 36, 0.12)" : "rgba(56, 189, 248, 0.06)";
+          mapCtx.fill();
           mapCtx.strokeStyle = isSel ? "#fbbf24" : "rgba(248, 250, 252, 0.72)";
           mapCtx.lineWidth = isSel ? 2.2 : 1;
           mapCtx.stroke();
@@ -1739,6 +1730,9 @@
       }
 
       layoutWindyUnderlay();
+      } catch (err) {
+        console.warn("drawMap", err);
+      }
       requestAnimationFrame(drawMap);
     }
 
@@ -2197,7 +2191,7 @@
     camera.lon = camera.targetLon;
     camera.lat = camera.targetLat;
     syncWindyLayerButtons();
-    mountWindyFrame("underlay");
+    mountWindyFrame("embed");
     syncTimeOverlay();
     drawMap();
     setInterval(() => {
