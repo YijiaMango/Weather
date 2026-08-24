@@ -1,5 +1,5 @@
 /**
- * Windy 輔助層（非中央氣象署）
+ * Windy 公開資料客戶端（Point Forecast / Map Forecast / Webcams）
  * Point Forecast / Map Forecast / Webcams — 金鑰各一把，不可混用
  */
 (function (global) {

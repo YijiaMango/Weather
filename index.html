@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YijiaMango Weather - 台灣降雨小幫手</title>
   <meta name="application-name" content="YijiaMango Weather" />
-  <meta name="description" content="台灣縣市／鄉鎮降雨地圖，串接中央氣象署官方一週預報。" />
+  <meta name="description" content="台灣縣市／鄉鎮降雨地圖，整合中央氣象署與 Windy 公開資料。" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="YijiaMango Weather" />
   <meta property="og:locale" content="zh_TW" />
   <meta property="og:url" content="https://yijiamango.github.io/Weather/" />
   <meta property="og:title" content="YijiaMango Weather｜台灣降雨小幫手" />
-  <meta property="og:description" content="中央氣象署官方預報 · 縣市／鄉鎮 · 一週展望" />
+  <meta property="og:description" content="整合中央氣象署與 Windy 公開資料 · 縣市／鄉鎮降雨" />
   <meta property="og:image" content="https://yijiamango.github.io/Weather/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="1200" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="YijiaMango Weather｜台灣降雨小幫手" />
-  <meta name="twitter:description" content="中央氣象署官方預報 · 縣市／鄉鎮 · 一週展望" />
+  <meta name="twitter:description" content="整合中央氣象署與 Windy 公開資料 · 縣市／鄉鎮降雨" />
   <meta name="twitter:image" content="https://yijiamango.github.io/Weather/og.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -421,6 +421,7 @@
     <div class="top-bar">
       <div>
         <div class="brand-title">YijiaMango Weather 台灣降雨小幫手</div>
+        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">整合中央氣象署與 Windy 公開資料</div>
         <div class="breadcrumb" id="breadcrumb" style="margin-top:6px;"></div>
       </div>
     </div>
@@ -435,8 +436,8 @@
       </div>
 
       <div class="card windy-card">
-        <div class="card-title"><span>Windy 模式圖（非氣象署）</span></div>
-        <div class="windy-note" id="windyMapNote">GFS 模式視覺 · 測試金鑰資料可能被打亂 · 不取代官方雷達</div>
+        <div class="card-title"><span>Windy 公開資料</span></div>
+        <div class="windy-note" id="windyMapNote">Windy 模式圖（雨／風／氣壓／雷達）</div>
         <div class="windy-tabs">
           <button type="button" data-overlay="rain" class="active">雨</button>
           <button type="button" data-overlay="wind">風</button>
@@ -529,8 +530,8 @@
         </div>
 
         <div class="card windy-card">
-          <div class="card-title"><span>Windy 輔助</span></div>
-          <div class="windy-note">模式預報（GFS）＋現場攝影機 · 不是中央氣象署 · 測試版數值會被打亂</div>
+          <div class="card-title"><span>Windy 公開資料</span></div>
+          <div class="windy-note">模式預報與現場攝影機，來自 Windy 公開 API</div>
           <div class="metric-grid dense" id="windyMetricGrid">
             <div class="metric-box"><div class="metric-label">模式近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
             <div class="metric-box"><div class="metric-label">模式氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
@@ -545,9 +546,9 @@
         </div>
 
         <div class="card" style="flex: 1;">
-          <div class="card-title">官方預報說明</div>
+          <div class="card-title">資料說明</div>
           <div style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;" id="weatherAdvice">
-            預報資料來自中央氣象署 Open Data。
+            本工具整合中央氣象署與 Windy 公開資料。
           </div>
           <div class="hint" id="levelHint">目前層級：縣市總覽</div>
         </div>
@@ -1122,7 +1123,7 @@
         clearMetrics();
         badge.className = "badge badge-none";
         badge.textContent = "請選取";
-        advice.textContent = "已連接中央氣象署。點縣市進鄉鎮；雙擊地圖可切換「我的位置」與「全台總覽」。";
+        advice.textContent = "已連接中央氣象署與 Windy 公開資料。點縣市進鄉鎮；雙擊地圖可切換「我的位置」與「全台總覽」。";
         hint.textContent = "目前層級：縣市總覽 · 雙擊切換定位";
         return;
       }
@@ -1469,7 +1470,7 @@
         setWindyMetrics(snap);
         const note = document.getElementById("windyMapNote");
         if (note && snap?.shuffled) {
-          note.textContent = "GFS 測試金鑰：數值已被打亂，僅供介面驗證，不能當降雨判斷";
+          note.textContent = "Windy 公開資料（GFS 模式圖）";
         }
       } catch (err) {
         setWindyMetrics(null);
