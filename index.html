@@ -1377,7 +1377,16 @@
         box.appendChild(im);
       }
       const loc = cam.location ? [cam.location.city, cam.location.region].filter(Boolean).join(" ") : "";
-      cap.textContent = `${cam.title || "攝影機"}${loc ? " · " + loc : ""} · Windy Webcam`;
+      cap.textContent = `${cam.title || "攝影機"}${loc ? " · " + loc : ""} · Windy 公開快照`;
+      if (cam.id) {
+        const a = document.createElement("a");
+        a.href = `https://www.windy.com/webcams/${cam.id}`;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "在 Windy 開啟";
+        a.style.cssText = "color:#38bdf8;margin-left:8px;";
+        cap.appendChild(a);
+      }
       box.appendChild(cap);
     }
 

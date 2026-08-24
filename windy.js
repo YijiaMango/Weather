@@ -76,7 +76,23 @@
     };
   }
 
-  async function loadNearbyWebcam(lat, lon, radiusKm = 160) {
+  function normalizeCam(cam) {
+    if (!cam) return null;
+    const loc = cam.location || {};
+    return {
+      id: cam.webcamId || cam.id,
+      title: cam.title,
+      location: {
+        city: loc.city || loc.title || "",
+        region: loc.region || loc.subcountry || ""
+      },
+      images: cam.images,
+      player: cam.player,
+      urls: cam.urls
+    };
+  }
+
+  async function loadOfficialWebcam(lat, lon, radiusKm) {
     const u = new URL(CAM_URL);
     u.searchParams.set("nearby", `${lat.toFixed(4)},${lon.toFixed(4)},${radiusKm}`);
     u.searchParams.set("limit", "1");
@@ -86,8 +102,32 @@
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.message || `CAM_HTTP_${res.status}`);
-    const list = json.webcams || json.data || [];
-    const cam = list[0] || null;
+    return normalizeCam((json.webcams || json.data || [])[0] || null);
+  }
+
+  /** Windy 網站公開列表（embed 同款），不需 Webcams 商業金鑰 */
+  async function loadPublicWebcam(lat, lon) {
+    const u = new URL("https://node.windy.com/webcams/v1.0/list");
+    u.searchParams.set("nearby", `${lat.toFixed(4)},${lon.toFixed(4)}`);
+    u.searchParams.set("limit", "1");
+    u.searchParams.set("lang", "zh-TW");
+    const res = await fetch(u.toString());
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.message || `CAM_HTTP_${res.status}`);
+    return normalizeCam((json.cams || json.webcams || [])[0] || null);
+  }
+
+  async function loadNearbyWebcam(lat, lon, radiusKm = 160) {
+    try {
+      const cam = await loadOfficialWebcam(lat, lon, radiusKm);
+      if (cam) {
+        cache.webcam = cam;
+        return cam;
+      }
+    } catch (_) {
+      // Testing key 仍 401；401 沒 CORS，瀏覽器只看得到 Failed to fetch
+    }
+    const cam = await loadPublicWebcam(lat, lon);
     cache.webcam = cam;
     return cam;
   }
