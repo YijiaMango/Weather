@@ -915,13 +915,8 @@
           `<div class="drops">${drops}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
-          if (day === 0) {
-            hourFollowClock = true;
-            currentHour = nowHour();
-          } else {
-            hourFollowClock = false;
-            currentHour = ready ? (dailyOutlook(day).peakHour ?? 12) : 12;
-          }
+          hourFollowClock = true;
+          currentHour = nowHour();
           timeSlider.value = currentHour;
           syncTimeOverlay();
           renderWeekStrip();
@@ -2202,7 +2197,7 @@
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
-      hourFollowClock = currentDayOffset === 0 && currentHour === nowHour();
+      hourFollowClock = currentHour === nowHour();
       syncTimeOverlay();
       updateInfoPanel();
       drawChart();
@@ -2235,7 +2230,7 @@
     syncTimeOverlay();
     drawMap();
     setInterval(() => {
-      if (!hourFollowClock || currentDayOffset !== 0) return;
+      if (!hourFollowClock) return;
       const h = nowHour();
       if (h === currentHour) return;
       currentHour = h;
