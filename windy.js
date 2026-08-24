@@ -169,13 +169,12 @@
     return cam;
   }
 
-  function embedMapUrl(lat, lon, overlay = "rain", targetMs = Date.now(), zoom = 6) {
+  function embedMapUrl(_lat, _lon, overlay = "rain", targetMs = Date.now()) {
     const hoursAhead = Math.max(0, Math.min(240, Math.round((targetMs - Date.now()) / 36e5)));
-    const z = Math.max(3, Math.min(12, Math.round(Number(zoom) || 6)));
     const q = new URLSearchParams({
-      lat: String(Number(lat).toFixed(4)),
-      lon: String(Number(lon).toFixed(4)),
-      zoom: String(z),
+      lat: "23.72",
+      lon: "120.97",
+      zoom: "6",
       level: "surface",
       overlay,
       menu: "",
@@ -194,16 +193,6 @@
     return `https://embed.windy.com/embed2.html?${q.toString()}`;
   }
 
-  function underlayUrl(lat, lon, overlay = "rain", zoom = 6) {
-    const q = new URLSearchParams({
-      lat: String(Number(lat).toFixed(4)),
-      lon: String(Number(lon).toFixed(4)),
-      zoom: String(Number(zoom).toFixed(2)),
-      overlay
-    });
-    return `./windy-underlay.html?${q.toString()}`;
-  }
-
   global.WINDY = {
     POINT_KEY,
     MAP_KEY,
@@ -214,7 +203,6 @@
     hourlyForDay,
     precipMmToPop,
     loadNearbyWebcam,
-    embedMapUrl,
-    underlayUrl
+    embedMapUrl
   };
 })(window);
