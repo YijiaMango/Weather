@@ -285,11 +285,6 @@
       border: 0;
       display: block;
     }
-    .windy-map-wrap #windy {
-      position: absolute;
-      inset: 0;
-      display: none;
-    }
     .windy-tabs {
       display: flex;
       gap: 6px;
@@ -445,7 +440,6 @@
           <button type="button" data-overlay="radar">雷達</button>
         </div>
         <div class="windy-map-wrap">
-          <div id="windy"></div>
           <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
         </div>
       </div>
@@ -1336,7 +1330,6 @@
 
     let windyOverlay = "rain";
     let windyTimer = 0;
-    let windyMapCtl = null;
 
     function windyFocus() {
       if (selectedTown) return selectedTown._c;
@@ -1393,71 +1386,11 @@
       box.appendChild(cap);
     }
 
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const el = document.createElement("script");
-        el.src = src;
-        el.onload = () => resolve();
-        el.onerror = () => reject(new Error(src));
-        document.head.appendChild(el);
-      });
-    }
-
-    async function tryBootWindyMapApi(lat, lon) {
-      if (windyMapCtl) {
-        windyMapCtl.map.setView([lat, lon], 8);
-        try { windyMapCtl.store.set("overlay", windyOverlay); } catch (_) {}
-        return true;
-      }
-      try {
-        if (!document.querySelector("link[data-leaflet]")) {
-          const css = document.createElement("link");
-          css.rel = "stylesheet";
-          css.href = "https://unpkg.com/leaflet@1.4.0/dist/leaflet.css";
-          css.setAttribute("data-leaflet", "1");
-          document.head.appendChild(css);
-        }
-        if (!window.L) await loadScript("https://unpkg.com/leaflet@1.4.0/dist/leaflet.js");
-        if (!window.windyInit) await loadScript("https://api.windy.com/assets/map-forecast/libBoot.js");
-        const host = document.getElementById("windy");
-        const frame = document.getElementById("windyMapFrame");
-        host.style.display = "block";
-        await new Promise((resolve, reject) => {
-          const t = setTimeout(() => reject(new Error("timeout")), 8000);
-          window.windyInit({
-            key: WINDY.MAP_KEY,
-            lat,
-            lon,
-            zoom: 8,
-            overlay: windyOverlay,
-            verbose: false
-          }, (api) => {
-            clearTimeout(t);
-            windyMapCtl = api;
-            frame.style.display = "none";
-            resolve(api);
-          });
-        });
-        return true;
-      } catch (_) {
-        const host = document.getElementById("windy");
-        if (host) host.style.display = "none";
-        const frame = document.getElementById("windyMapFrame");
-        if (frame) frame.style.display = "block";
-        return false;
-      }
-    }
-
     function syncWindyMap(lat, lon) {
       const frame = document.getElementById("windyMapFrame");
+      if (!frame || !window.WINDY) return;
       const src = WINDY.embedMapUrl(lat, lon, windyOverlay);
-      if (frame && frame.getAttribute("src") !== src) frame.src = src;
-      if (windyMapCtl?.map) {
-        windyMapCtl.map.setView([lat, lon], 8);
-        try { windyMapCtl.store.set("overlay", windyOverlay); } catch (_) {}
-      } else {
-        tryBootWindyMapApi(lat, lon);
-      }
+      if (frame.getAttribute("src") !== src) frame.src = src;
     }
 
     async function refreshWindy() {
