@@ -169,25 +169,23 @@
     return cam;
   }
 
-  function embedMapUrl(lat, lon, overlay = "rain", targetMs = Date.now()) {
+  function embedMapUrl(_lat, _lon, overlay = "rain", targetMs = Date.now()) {
     const hoursAhead = Math.max(0, Math.min(240, Math.round((targetMs - Date.now()) / 36e5)));
     const q = new URLSearchParams({
-      lat: lat.toFixed(3),
-      lon: lon.toFixed(3),
-      zoom: "8",
+      lat: "23.72",
+      lon: "120.97",
+      zoom: "6",
       level: "surface",
       overlay,
       menu: "",
       message: "",
-      marker: "true",
+      marker: "",
       calendar: hoursAhead === 0 ? "" : "in",
       forecast: hoursAhead === 0 ? "" : String(hoursAhead),
       pressure: overlay === "pressure" ? "true" : "",
       type: "map",
       location: "coordinates",
       detail: "",
-      detailLat: lat.toFixed(3),
-      detailLon: lon.toFixed(3),
       metricWind: "m/s",
       metricTemp: "°C",
       radarRange: "-1"
