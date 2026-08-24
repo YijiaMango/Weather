@@ -554,6 +554,7 @@
     let selectedTown = null;   // Feature
     let currentHour = new Date().getHours();
     let currentDayOffset = 0; // 0=今天 … 6=第7天
+    let hourFollowClock = true; // 今天且未手動拉桿時，跟著裝置現在時刻
     let hoverName = "";
     let userPos = null; // { lon, lat, accuracy }
     let locating = false;
@@ -570,7 +571,19 @@
 
     const timeSlider = document.getElementById("timeSlider");
     const weekStrip = document.getElementById("weekStrip");
-    timeSlider.value = currentHour;
+
+    function nowHour() {
+      return new Date().getHours();
+    }
+
+    function snapToNowHour() {
+      currentHour = nowHour();
+      currentDayOffset = 0;
+      hourFollowClock = true;
+      timeSlider.value = currentHour;
+    }
+
+    snapToNowHour();
 
     const WEEKDAY_SHORT = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -746,9 +759,13 @@
           `<div class="pp">${ready && outlook.maxPop != null ? outlook.maxPop + "%" : "—"}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
-          if (ready) currentHour = dailyOutlook(day).peakHour ?? 12;
-          else if (day === 0) currentHour = new Date().getHours();
-          else currentHour = 12;
+          if (day === 0) {
+            hourFollowClock = true;
+            currentHour = nowHour();
+          } else {
+            hourFollowClock = false;
+            currentHour = ready ? (dailyOutlook(day).peakHour ?? 12) : 12;
+          }
           timeSlider.value = currentHour;
           syncTimeOverlay();
           renderWeekStrip();
@@ -1998,6 +2015,7 @@
 
     timeSlider.addEventListener("input", e => {
       currentHour = parseInt(e.target.value, 10);
+      hourFollowClock = currentDayOffset === 0 && currentHour === nowHour();
       syncTimeOverlay();
       updateInfoPanel();
       drawChart();
@@ -2018,7 +2036,20 @@
 
     window.addEventListener("resize", resizeCanvases);
     resizeCanvases();
+    syncTimeOverlay();
     drawMap();
+    setInterval(() => {
+      if (!hourFollowClock || currentDayOffset !== 0) return;
+      const h = nowHour();
+      if (h === currentHour) return;
+      currentHour = h;
+      timeSlider.value = h;
+      syncTimeOverlay();
+      updateInfoPanel();
+      drawChart();
+      drawMap();
+      scheduleWindy();
+    }, 30 * 1000);
     document.title = "YijiaMango Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => {
       locateDevice(true);
