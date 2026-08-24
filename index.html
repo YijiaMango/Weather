@@ -152,15 +152,26 @@
         order: 1;
         width: 100%;
         height: auto;
-        aspect-ratio: 4 / 5;
+        aspect-ratio: 16 / 9;
         max-height: none;
       }
-      .info-panel { order: 3; height: auto; }
-      .card.windy-card { height: auto; }
-      .webcam-frame { flex: none; }
+      .info-panel { order: 3; height: auto; width: 100%; }
+      .card.windy-card { height: auto; width: 100%; }
+      .webcam-frame { flex: none; width: 100%; }
       .webcam-frame img,
-      .webcam-frame iframe { height: auto; flex: none; }
-      .windy-map-wrap { flex: none; height: min(42vh, 360px); }
+      .webcam-frame iframe {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        flex: none;
+      }
+      .windy-map-wrap {
+        flex: none;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+      }
       .location-card { order: 4; grid-column: auto; }
     }
     .canvas-container {
