@@ -117,7 +117,7 @@
     .breadcrumb .here { color: var(--text-main); font-weight: 600; }
     .main-grid {
       display: grid;
-      grid-template-columns: 1fr 340px;
+      grid-template-columns: 1fr 380px;
       gap: 16px;
     }
     .map-stack {
@@ -128,6 +128,7 @@
     }
     @media (max-width: 820px) {
       .main-grid { grid-template-columns: 1fr; }
+      .info-panel { position: static; max-height: none; }
     }
     .canvas-container {
       position: relative;
@@ -172,6 +173,11 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
+      position: sticky;
+      top: 12px;
+      align-self: start;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
     }
     .card {
       background: var(--bg-card);
@@ -273,7 +279,7 @@
     }
     .windy-map-wrap {
       position: relative;
-      height: 280px;
+      height: min(38vh, 360px);
       border-radius: 10px;
       overflow: hidden;
       border: 1px solid var(--border);
@@ -444,31 +450,6 @@
         </div>
       </div>
 
-      <div class="card windy-card">
-        <div class="card-title"><span>Windy 公開資料</span></div>
-        <div class="windy-note" id="windyMapNote">模式圖、數值與現場攝影機</div>
-        <div class="windy-tabs">
-          <button type="button" data-overlay="rain" class="active">雨</button>
-          <button type="button" data-overlay="wind">風</button>
-          <button type="button" data-overlay="pressure">氣壓</button>
-          <button type="button" data-overlay="radar">雷達</button>
-        </div>
-        <div class="windy-map-wrap">
-          <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
-        </div>
-        <div class="metric-grid dense" id="windyMetricGrid" style="margin-top:10px;">
-          <div class="metric-box"><div class="metric-label">模式近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式風速</div><div class="metric-value" id="windyWind">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式氣壓</div><div class="metric-value" id="windyPres">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式濕度</div><div class="metric-value" id="windyRh">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
-        </div>
-        <div class="webcam-frame" id="webcamFrame">
-          <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
-        </div>
-      </div>
-
       <div class="card">
         <div class="card-title">
           <span>選取地點</span>
@@ -530,16 +511,35 @@
             <div class="metric-value sm" id="valRes">—</div>
           </div>
         </div>
+        <div class="hint" id="levelHint" style="margin-top:10px;">目前層級：縣市總覽</div>
+        <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; margin-top: 6px;" id="weatherAdvice"></div>
       </div>
       </div>
 
       <div class="info-panel">
-        <div class="card" style="flex: 1;">
-          <div class="card-title">資料說明</div>
-          <div style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;" id="weatherAdvice">
-            本工具整合中央氣象署與 Windy 公開資料。
+        <div class="card windy-card" style="flex: 1;">
+          <div class="card-title"><span>Windy 公開資料</span></div>
+          <div class="windy-note" id="windyMapNote">模式圖、數值與現場攝影機</div>
+          <div class="windy-tabs">
+            <button type="button" data-overlay="rain" class="active">雨</button>
+            <button type="button" data-overlay="wind">風</button>
+            <button type="button" data-overlay="pressure">氣壓</button>
+            <button type="button" data-overlay="radar">雷達</button>
           </div>
-          <div class="hint" id="levelHint">目前層級：縣市總覽</div>
+          <div class="windy-map-wrap">
+            <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
+          </div>
+          <div class="metric-grid dense" id="windyMetricGrid" style="margin-top:10px;">
+            <div class="metric-box"><div class="metric-label">模式近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
+            <div class="metric-box"><div class="metric-label">模式氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
+            <div class="metric-box"><div class="metric-label">模式風速</div><div class="metric-value" id="windyWind">—</div></div>
+            <div class="metric-box"><div class="metric-label">模式氣壓</div><div class="metric-value" id="windyPres">—</div></div>
+            <div class="metric-box"><div class="metric-label">模式濕度</div><div class="metric-value" id="windyRh">—</div></div>
+            <div class="metric-box"><div class="metric-label">模式時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
+          </div>
+          <div class="webcam-frame" id="webcamFrame">
+            <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
+          </div>
         </div>
       </div>
     </div>
