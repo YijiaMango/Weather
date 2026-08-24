@@ -597,21 +597,20 @@
   function hourPointFor(hourly, targetDay, hour) {
     if (!hourly || !hourly.length) return null;
     const hourIsoGuess = `${targetDay}T${String(hour).padStart(2, "0")}:00:00+08:00`;
-    const exact = hourly.find((x) => dayKey(x.start) === targetDay && hourOf(x.start) === hour)
-      || covering(hourly.map((x) => ({ ...x })), hourIsoGuess);
-    if (exact) return exact;
-
     const sameDay = hourly
       .filter((x) => dayKey(x.start) === targetDay)
       .slice()
       .sort((a, b) => hourOf(a.start) - hourOf(b.start));
-    const pool = sameDay.length ? sameDay : hourly.slice().sort((a, b) => toMs(a.start) - toMs(b.start));
-    if (!pool.length) return null;
-    if (hour <= hourOf(pool[0].start)) return pool[0];
-    if (hour >= hourOf(pool[pool.length - 1].start)) return pool[pool.length - 1];
-    let best = pool[0];
+    // 禁止跨日回填：否則一週後段會吃到 3 天細預報的舊氣溫
+    if (!sameDay.length) return null;
+    const exact = sameDay.find((x) => hourOf(x.start) === hour)
+      || covering(sameDay.map((x) => ({ ...x })), hourIsoGuess);
+    if (exact) return exact;
+    if (hour <= hourOf(sameDay[0].start)) return sameDay[0];
+    if (hour >= hourOf(sameDay[sameDay.length - 1].start)) return sameDay[sameDay.length - 1];
+    let best = sameDay[0];
     let bestScore = Infinity;
-    for (const p of pool) {
+    for (const p of sameDay) {
       const score = Math.abs(hourOf(p.start) - hour);
       if (score < bestScore) {
         bestScore = score;
@@ -718,16 +717,24 @@
       const slot3 = (pack.slots3h || []).find((p) => coversHour(p, dayOffset, h));
       const slot12 = (pack.weekly || []).find((p) => coversHour(p, dayOffset, h));
       const popSlot = slot3 || slot12 || null;
+      // 官方 PoP 為「-」時不捏造數值；氣溫／天氣現象仍用該 12h 時段
       const pop = popSlot && popSlot.pop != null ? popSlot.pop : null;
       let src = "—";
       if (slot3 && slot3.pop != null) src = "3h";
       else if (slot12 && slot12.pop != null) src = "12h";
       else if (hourPoint) src = "1h";
+      else if (slot12 || slot3) src = "12h";
+      let t = hourPoint?.t || slot3?.t || slot12?.t || "";
+      if (!t && slot12?.minT && slot12?.maxT) {
+        const a = parseInt(slot12.minT, 10);
+        const b = parseInt(slot12.maxT, 10);
+        if (!Number.isNaN(a) && !Number.isNaN(b)) t = String(Math.round((a + b) / 2));
+      }
       out.push({
         hour: h,
         start: hourPoint?.start || popSlot?.start || hourIsoGuess,
         pop,
-        t: hourPoint?.t || slot3?.t || slot12?.t || "",
+        t,
         td: hourPoint?.td || slot3?.td || slot12?.td || "",
         rh: hourPoint?.rh || slot3?.rh || slot12?.rh || "",
         at: hourPoint?.at || slot3?.at || slot12?.maxAt || slot12?.minAt || "",

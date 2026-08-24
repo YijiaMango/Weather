@@ -586,7 +586,7 @@
         <dt>資料來源</dt>
         <dd>中央氣象署開放資料：縣市 36 小時預報、鄉鎮三日及一週預報、自動雨量站觀測；官網雷達回波 <code>CV1_TW_1000</code>（限當日）。Windy Point Forecast（GFS）、公開地圖嵌入及網路攝影機。</dd>
         <dt>圖表</dt>
-        <dd>氣溫、相對濕度與風速若雙方均有數值，採算術平均。降雨機率以中央氣象署為準；官方無該時段資料時，改以 Windy GFS 推估，圖上以半透明直柱表示。綠線為氣溫。測站雨量為實測，不與模式資料混合。</dd>
+        <dd>氣溫、相對濕度與風速若雙方均有數值，採算術平均。降雨機率以中央氣象署為準；官方無該時段資料時，優先改以 Windy GFS 推估，其次依天氣現象估列。圖上半透明直柱為推估值。綠線為氣溫。測站雨量為實測，不與模式資料混合。</dd>
         <dt>地圖</dt>
         <dd>行政區界採用 taiwan-atlas TopoJSON。於地圖上雙擊，可在目前位置與全台總覽之間切換。</dd>
       </dl>
@@ -792,6 +792,20 @@
       return { ...(extra || {}), ...(hit || {}) };
     }
 
+    function estimatePopFromWx(wx) {
+      const s = String(wx || "");
+      if (!s || s === "—") return null;
+      if (/雪|雹/.test(s)) return 70;
+      if (/大雷雨|雷雨|雷/.test(s)) return 75;
+      if (/短暫陣雨或雷雨|陣雨或雷雨/.test(s)) return 70;
+      if (/短暫陣雨|陣雨/.test(s)) return 60;
+      if (/雨/.test(s)) return 55;
+      if (/陰/.test(s)) return 25;
+      if (/多雲/.test(s)) return 15;
+      if (/晴/.test(s)) return 10;
+      return null;
+    }
+
     function filledHourlySeries(day = currentDayOffset) {
       const empty = Array.from({ length: 24 }, (_, h) => ({
         hour: h, pop: null, t: "", wx: "", resolution: "—"
@@ -826,6 +840,13 @@
           return { ...h, t: h.t || wT };
         });
       }
+      // 官方 PoP「-」且 Windy 也沒有時：用天氣現象估柱，避免一週後段空白
+      s = s.map((h) => {
+        if (h.pop != null) return h;
+        const est = estimatePopFromWx(h.wx);
+        if (est == null) return h;
+        return { ...h, pop: est, resolution: "wx" };
+      });
       if (day === 0 && activeCountyName() && window.CWA?.rememberToday) {
         CWA.rememberToday(activeCountyName(), activeTownName() || null, s);
       }
@@ -1454,6 +1475,7 @@
       }
 
       const tag = data.resolution === "windy" ? "Windy GFS"
+        : data.resolution === "wx" ? "天氣現象推估"
         : mixed || data.resolution === "blend" ? "氣象署×Windy"
         : data.resolution === "cache" ? "當日紀錄"
         : "中央氣象署";
@@ -1874,7 +1896,7 @@
           const barH = Math.min(chartH, (d.pop / 100) * chartH);
           const y = 10 + chartH - barH;
           chartCtx.fillStyle = popBarColor(d.pop, active);
-          if ((d.resolution === "windy" || d.resolution === "blend") && !active) chartCtx.globalAlpha = 0.5;
+          if ((d.resolution === "windy" || d.resolution === "blend" || d.resolution === "wx") && !active) chartCtx.globalAlpha = 0.5;
           else if (d.resolution === "cache" && !active) chartCtx.globalAlpha = 0.7;
           chartCtx.fillRect(x, y, barWidth, Math.max(d.pop === 0 ? 1 : 0, barH));
           chartCtx.globalAlpha = 1;
