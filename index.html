@@ -435,6 +435,7 @@
         <div class="chart-legend">
           <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
           <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
         </div>
       </div>
 
@@ -652,20 +653,89 @@
     }
 
     function forecastAt(hour = currentHour, day = currentDayOffset) {
-      if (!window.CWA || !activeCountyName()) return null;
-      return CWA.snapshot(activeCountyName(), activeTownName() || null, day, hour);
+      if (!activeCountyName()) return null;
+      const hit = filledHourlySeries(day)[hour] || null;
+      const extra = window.CWA ? CWA.snapshot(activeCountyName(), activeTownName() || null, day, hour) : null;
+      if (!hit && !extra) return null;
+      return { ...(extra || {}), ...(hit || {}) };
+    }
+
+    function filledHourlySeries(day = currentDayOffset) {
+      const empty = Array.from({ length: 24 }, (_, h) => ({
+        hour: h, pop: null, t: "", wx: "", resolution: "—"
+      }));
+      let s = (!window.CWA || !activeCountyName())
+        ? empty
+        : (CWA.hourlySeries(activeCountyName(), activeTownName() || null, day) || empty);
+      if (!s.length) s = empty;
+      const w = window.WINDY?.hourlyForDay && WINDY.cache?.point
+        ? WINDY.hourlyForDay(WINDY.cache.point, day)
+        : null;
+      if (w) {
+        s = s.map((h, i) => {
+          const wh = w[i];
+          if (!wh) return h;
+          const wPop = wh.pop;
+          const wT = wh.t != null && !Number.isNaN(wh.t) ? String(Math.round(wh.t * 10) / 10) : "";
+          if (h.pop != null && (h.resolution === "3h" || h.resolution === "cache")) {
+            return { ...h, t: h.t || wT };
+          }
+          if (h.pop != null && (h.resolution === "12h" || h.resolution === "blend") && wPop != null) {
+            return {
+              ...h,
+              pop: Math.round(h.pop * 0.55 + wPop * 0.45),
+              t: h.t || wT,
+              resolution: "blend"
+            };
+          }
+          if (h.pop == null && wPop != null) {
+            return { ...h, pop: wPop, t: h.t || wT, resolution: "windy" };
+          }
+          return { ...h, t: h.t || wT };
+        });
+      }
+      if (day === 0 && activeCountyName() && window.CWA?.rememberToday) {
+        CWA.rememberToday(activeCountyName(), activeTownName() || null, s);
+      }
+      return s;
     }
 
     function dailyOutlook(day) {
-      if (!window.CWA || !activeCountyName()) {
-        return { maxPop: 0, avgPop: 0, peakHour: 12, wx: "—", minT: "—", maxT: "—", count: 0 };
+      const series = filledHourlySeries(day);
+      const popHours = series.filter((h) => h.pop != null);
+      if (!popHours.length) {
+        return { maxPop: null, avgPop: null, wx: "—", minT: "—", maxT: "—", count: 0, peakHour: 12 };
       }
-      return CWA.dayOutlookFromPack(activeCountyName(), activeTownName() || null, day);
+      let maxPop = 0;
+      let sum = 0;
+      let peakHour = 12;
+      let wx = "—";
+      const temps = [];
+      for (const h of popHours) {
+        sum += h.pop;
+        if (h.pop >= maxPop) {
+          maxPop = h.pop;
+          peakHour = h.hour;
+          if (h.wx) wx = h.wx;
+        }
+      }
+      for (const h of series) {
+        const n = parseFloat(h.t);
+        if (!Number.isNaN(n)) temps.push(n);
+      }
+      return {
+        maxPop,
+        avgPop: Math.round(sum / popHours.length),
+        wx: wx || "—",
+        minT: temps.length ? String(Math.round(Math.min(...temps))) : "—",
+        maxT: temps.length ? String(Math.round(Math.max(...temps))) : "—",
+        count: popHours.length,
+        peakHour
+      };
     }
 
     function activeHourlySeries(day = currentDayOffset) {
-      if (!window.CWA || !activeCountyName()) return [];
-      return CWA.hourlySeries(activeCountyName(), activeTownName() || null, day);
+      return filledHourlySeries(day);
     }
 
     function popForCountyFeature(countyFeature, hour = currentHour, day = currentDayOffset) {
@@ -695,8 +765,7 @@
 
     function renderWeekStrip() {
       weekStrip.innerHTML = "";
-      const ready = !!(selectedCounty || selectedTown) && window.CWA && CWA.hasKey() &&
-        !!(CWA.cache.packs?.[CWA.normName(activeCountyName())] || activePeriods().length);
+      const ready = !!(selectedCounty || selectedTown);
       for (let day = 0; day < 7; day++) {
         const { wd, md } = formatDayLabel(day);
         const outlook = ready ? dailyOutlook(day) : { maxPop: 0, avgPop: 0, wx: "—" };
@@ -1130,13 +1199,13 @@
         return;
       }
 
-      if (data.resolution === "—") {
+      if (data.resolution === "—" && data.pop == null && !data.t) {
         clearMetrics();
-        document.getElementById("valRes").textContent = "此時段尚無官方預報點";
+        document.getElementById("valRes").textContent = "此時段尚無預報點";
         badge.className = "badge badge-none";
         badge.textContent = "無此時段";
-        advice.textContent = "官方近程預報尚未覆蓋到此小時（通常從最近發布時刻起算）。請拖曳時間軸或改選有資料的時段。";
-        hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區（官方）" : "目前層級：縣市（官方）";
+        advice.textContent = "此時段尚無降雨機率。請拖曳時間軸或改選有資料的時段。";
+        hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區" : "目前層級：縣市";
         return;
       }
 
@@ -1159,10 +1228,17 @@
       document.getElementById("valWind").textContent = windParts.length ? windParts.join(" · ") : "—";
       document.getElementById("valUvi").textContent =
         data.uvi ? `${data.uvi}${data.uviLevel ? `（${data.uviLevel}）` : ""}` : "—";
-      const resMap = { "3h": "3 小時降雨機率＋逐時氣溫", "12h": "12 小時時段", "1h": "逐時氣溫", "cache": "本機當日紀錄（官方已撤下）" };
+      const resMap = {
+        "3h": "3 小時降雨機率＋逐時氣溫",
+        "12h": "12 小時時段",
+        blend: "12 小時時段 × 模式平均",
+        "1h": "逐時氣溫",
+        cache: "本機當日紀錄",
+        windy: "Windy GFS 模式補值"
+      };
       document.getElementById("valRes").textContent = resMap[data.resolution] || data.resolution || "—";
 
-      hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區（官方）" : "目前層級：縣市（官方）";
+      hint.textContent = target.kind === "town" ? "目前層級：鄉鎮市區" : "目前層級：縣市";
 
       if (data.pop == null) {
         badge.className = "badge badge-none";
@@ -1181,11 +1257,15 @@
         badge.textContent = "降雨機率低";
       }
 
+      const tag = data.resolution === "windy" ? "Windy GFS"
+        : data.resolution === "blend" ? "氣象署×模式"
+        : data.resolution === "cache" ? "當日紀錄"
+        : "中央氣象署";
       advice.textContent = data.desc
-        ? `【中央氣象署】${name}｜${data.desc}`
+        ? `【${tag}】${name}｜${data.desc}`
         : data.pop != null
-          ? `【中央氣象署】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%`
-          : `【中央氣象署】${name}｜此時段尚無官方降雨機率（近程預報通常從發布時刻起算）`;
+          ? `【${tag}】${name}｜${data.wx || "—"}｜降雨機率 ${data.pop}%`
+          : `【${tag}】${name}｜此時段尚無降雨機率`;
     }
 
     async function enterCounty(countyFeature, fit = true) {
@@ -1401,6 +1481,12 @@
       } catch (err) {
         renderWebcam(null, String(err.message || err));
       }
+      if (selectedCounty || selectedTown) {
+        filledHourlySeries(0);
+        renderWeekStrip();
+        drawChart();
+        updateInfoPanel();
+      }
     }
 
     function scheduleWindy() {
@@ -1565,12 +1651,12 @@
       }
 
       const hourlyData = activeHourlySeries(currentDayOffset);
-      const hasAny = hourlyData.some((d) => d.pop != null || d.resolution === "3h" || d.resolution === "12h");
+      const hasAny = hourlyData.some((d) => d.pop != null);
       if (!hasAny) {
         chartCtx.fillStyle = "#64748b";
         chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
         chartCtx.textAlign = "center";
-        chartCtx.fillText("此日尚無官方降雨機率時段（或仍在載入）", w / 2, h / 2);
+        chartCtx.fillText(window.WINDY?.cache?.point ? "此日無可用降雨資料" : "載入預報與模式補值中…", w / 2, h / 2);
         return;
       }
 
@@ -1613,7 +1699,8 @@
           const barH = Math.min(chartH, (d.pop / 100) * chartH);
           const y = 10 + chartH - barH;
           chartCtx.fillStyle = popBarColor(d.pop, active);
-          if (d.resolution === "cache" && !active) chartCtx.globalAlpha = 0.55;
+          if ((d.resolution === "windy" || d.resolution === "blend") && !active) chartCtx.globalAlpha = 0.5;
+          else if (d.resolution === "cache" && !active) chartCtx.globalAlpha = 0.7;
           chartCtx.fillRect(x, y, barWidth, Math.max(d.pop === 0 ? 1 : 0, barH));
           chartCtx.globalAlpha = 1;
           if (active) {

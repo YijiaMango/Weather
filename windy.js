@@ -53,6 +53,43 @@
     return json;
   }
 
+  function precipMmToPop(mm) {
+    if (mm == null || Number.isNaN(mm)) return null;
+    if (mm < 0) mm = 0;
+    if (mm < 0.05) return 0;
+    return Math.round(Math.min(100, 100 * (1 - Math.exp(-mm / 2.8))));
+  }
+
+  /** GFS 約 3h 一筆、涵蓋近 10 天；回傳當地 0–23 時的雨量推估 PoP／氣溫 */
+  function hourlyForDay(json, dayOffset) {
+    if (!json?.ts?.length) return null;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() + dayOffset);
+    const startMs = start.getTime();
+    const endMs = startMs + 86400000;
+    const hours = Array.from({ length: 24 }, () => ({ pop: null, t: null, precipMm: null }));
+    const precip = json["past3hprecip-surface"] || [];
+    const temp = json["temp-surface"] || [];
+    for (let i = 0; i < json.ts.length; i++) {
+      const tEnd = +json.ts[i] < 1e12 ? +json.ts[i] * 1000 : +json.ts[i];
+      if (!tEnd) continue;
+      const prev = +json.ts[i - 1];
+      const tStart = i > 0 ? (prev < 1e12 ? prev * 1000 : prev) : tEnd - 3 * 3600000;
+      const mm = precip[i] == null ? null : precip[i] * 1000;
+      const pop = precipMmToPop(mm);
+      const tempC = temp[i] == null ? null : temp[i] - 273.15;
+      const lo = Math.max(startMs, tStart);
+      const hi = Math.min(endMs, tEnd);
+      if (hi <= lo) continue;
+      for (let ms = lo; ms < hi; ms += 3600000) {
+        const h = new Date(ms).getHours();
+        hours[h] = { pop, t: tempC, precipMm: mm };
+      }
+    }
+    return hours;
+  }
+
   function snapshotAt(json, targetMs) {
     if (!json?.ts?.length) return null;
     const i = pickIndex(json.ts, targetMs);
@@ -165,6 +202,8 @@
     cache,
     loadPoint,
     snapshotAt,
+    hourlyForDay,
+    precipMmToPop,
     loadNearbyWebcam,
     embedMapUrl
   };

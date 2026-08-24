@@ -647,6 +647,8 @@
     } catch (_) { /* quota / private mode */ }
   }
 
+  const JOURNAL_RANK = { "3h": 4, "12h": 3, blend: 3, cache: 2, windy: 1, "1h": 0, "—": 0 };
+
   function ingestDayJournal(countyName, townName, series) {
     if (!countyName || !series?.length) return;
     const journal = loadDayJournal();
@@ -654,18 +656,19 @@
     const place = journal.places[key] || { hours: {} };
     let changed = false;
     for (const h of series) {
-      // 只記錄當下官方仍在回傳的 3h／12h 點
-      if (h.resolution !== "3h" && h.resolution !== "12h") continue;
-      if (h.pop == null) continue;
+      if (h.pop == null && !h.t) continue;
       const prev = place.hours[String(h.hour)];
+      const rNew = JOURNAL_RANK[h.resolution] || 0;
+      const rOld = JOURNAL_RANK[prev?.resolution] || 0;
+      if (prev && rNew < rOld) continue;
       const next = {
         pop: h.pop,
-        t: h.t || "",
-        wx: h.wx || "",
-        resolution: h.resolution,
+        t: h.t || prev?.t || "",
+        wx: h.wx || prev?.wx || "",
+        resolution: h.resolution === "—" && prev ? prev.resolution : h.resolution,
         at: Date.now()
       };
-      if (!prev || prev.pop !== next.pop || prev.t !== next.t || prev.wx !== next.wx) {
+      if (!prev || prev.pop !== next.pop || prev.t !== next.t || prev.wx !== next.wx || prev.resolution !== next.resolution) {
         place.hours[String(h.hour)] = next;
         changed = true;
       }
@@ -677,21 +680,28 @@
     }
   }
 
+  function rememberToday(countyName, townName, series) {
+    ingestDayJournal(countyName, townName, series);
+  }
+
   function mergeDayJournal(countyName, townName, series) {
     if (!countyName || !series?.length) return series;
     const journal = loadDayJournal();
     const place = journal.places[placeKey(countyName, townName)];
     if (!place?.hours) return series;
     return series.map((h) => {
-      if (h.pop != null) return h;
       const cached = place.hours[String(h.hour)];
-      if (!cached || cached.pop == null) return h;
+      if (!cached) return h;
+      if (h.pop != null) {
+        return { ...h, t: h.t || cached.t || "", wx: h.wx || cached.wx || "" };
+      }
+      if (cached.pop == null && !cached.t) return h;
       return {
         ...h,
         pop: cached.pop,
         t: h.t || cached.t || "",
         wx: h.wx || cached.wx || "",
-        resolution: "cache",
+        resolution: cached.resolution === "3h" || cached.resolution === "12h" ? "cache" : (cached.resolution || "cache"),
         fromCache: true
       };
     });
@@ -1042,6 +1052,7 @@
     addDaysKey,
     hourOf,
     loadDayJournal,
+    rememberToday,
     COUNTY_WEEKLY,
     COUNTY_3DAY,
     SAT_PRODUCTS,
