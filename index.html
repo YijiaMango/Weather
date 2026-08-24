@@ -1659,6 +1659,8 @@
     }
 
     function scheduleWindy() {
+      const { lon, lat } = windyFocus();
+      syncWindyMap(lat, lon);
       clearTimeout(windyTimer);
       windyTimer = setTimeout(refreshWindy, 280);
     }
