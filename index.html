@@ -49,7 +49,7 @@
       flex-direction: column;
       align-items: center;
       min-height: 100vh;
-      padding: 0 16px 16px;
+      padding: 0 28px 20px;
     }
     .app-container {
       width: 100%;
@@ -149,15 +149,16 @@
       .map-stack { display: contents; }
       .canvas-container {
         order: 1;
+        width: 100%;
         height: auto;
         aspect-ratio: 4 / 5;
-        max-height: 560px;
+        max-height: none;
       }
       .info-panel { order: 3; height: auto; }
       .card.windy-card { height: auto; }
-      .webcam-frame { flex: none; min-height: 140px; }
+      .webcam-frame { flex: none; }
       .webcam-frame img,
-      .webcam-frame iframe { height: 180px; flex: none; }
+      .webcam-frame iframe { height: auto; flex: none; }
       .windy-map-wrap { flex: none; height: min(42vh, 360px); }
       .location-card { order: 4; grid-column: auto; }
     }
@@ -345,22 +346,26 @@
     }
     .windy-credit:hover { color: #38bdf8; }
     .webcam-frame {
-      flex: 0 0 34%;
+      flex: 0 0 auto;
       margin-bottom: 0;
       border-radius: 10px;
       overflow: hidden;
       background: #080d1a;
-      min-height: 0;
       display: flex;
       flex-direction: column;
     }
-    .webcam-frame img,
+    .webcam-frame img {
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      object-position: center;
+      display: block;
+      border: 0;
+    }
     .webcam-frame iframe {
       width: 100%;
-      flex: 1;
-      min-height: 0;
-      height: 0;
-      object-fit: cover;
+      aspect-ratio: 16 / 9;
+      height: auto;
       border: 0;
       display: block;
     }
