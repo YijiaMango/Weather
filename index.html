@@ -192,11 +192,13 @@
       height: 100%;
       border: 0;
       display: block;
-      transform-origin: 0 0;
       pointer-events: none;
+      /* 全鋪基底：禁止 transform 縮成小窗 */
+      transform: none !important;
     }
     #windyUnderlay.is-embed iframe {
-      height: calc(100% + 66px);
+      /* 裁掉 embed 底部播放列 */
+      height: calc(100% + 70px);
     }
     .windy-layer-bar {
       position: absolute;
@@ -696,8 +698,9 @@
     let windyOverlay = "rain";
     let windyMode = "underlay"; // underlay | embed
     let windyReady = false;
-    const windyEmbedView = { lon: MAINLAND_VIEW.lon, lat: MAINLAND_VIEW.lat, zoom: 7 };
+    const windyEmbedView = { lon: MAINLAND_VIEW.lon, lat: MAINLAND_VIEW.lat, zoom: Math.round(MAINLAND_VIEW.zoom) };
     let lastWindyMsg = "";
+    let embedSyncTimer = 0;
 
     const timeSlider = document.getElementById("timeSlider");
     const weekStrip = document.getElementById("weekStrip");
@@ -1507,26 +1510,47 @@
       windyMode = mode;
       windyReady = mode === "embed";
       wrap.classList.toggle("is-embed", mode === "embed");
+      const z = Math.round(camera.zoom);
       const src = mode === "underlay"
-        ? WINDY.underlayUrl(camera.lon, camera.lat, windyOverlay, camera.zoom)
-        : WINDY.embedMapUrl(camera.lon, camera.lat, windyOverlay, forecastTargetMs(), camera.zoom);
+        ? WINDY.underlayUrl(camera.lat, camera.lon, windyOverlay, camera.zoom)
+        : WINDY.embedMapUrl(camera.lat, camera.lon, windyOverlay, forecastTargetMs(), z);
       if (frame.getAttribute("src") !== src) frame.src = src;
       windyEmbedView.lon = camera.lon;
       windyEmbedView.lat = camera.lat;
-      windyEmbedView.zoom = Math.round(camera.zoom);
+      windyEmbedView.zoom = z;
       lastWindyMsg = "";
     }
 
+    /** embed 全鋪：停手後才改 src 對齊鏡頭（禁止 CSS scale，否則縮成小窗） */
+    function scheduleEmbedCameraSync(force = false) {
+      clearTimeout(embedSyncTimer);
+      const run = () => {
+        if (!window.WINDY || windyMode !== "embed") return;
+        if (mapInteract.active && !force) {
+          embedSyncTimer = setTimeout(run, 180);
+          return;
+        }
+        const z = Math.round(camera.zoom);
+        const drifted =
+          Math.abs(z - windyEmbedView.zoom) >= 1 ||
+          Math.hypot(camera.lon - windyEmbedView.lon, camera.lat - windyEmbedView.lat) > 0.08;
+        if (!force && !drifted) return;
+        const frame = document.getElementById("windyMapFrame");
+        if (!frame) return;
+        const src = WINDY.embedMapUrl(camera.lat, camera.lon, windyOverlay, forecastTargetMs(), z);
+        if (frame.getAttribute("src") !== src) frame.src = src;
+        windyEmbedView.lon = camera.lon;
+        windyEmbedView.lat = camera.lat;
+        windyEmbedView.zoom = z;
+      };
+      embedSyncTimer = setTimeout(run, force ? 0 : 220);
+    }
+
     function layoutWindyUnderlay() {
-      const wrap = document.getElementById("canvasWrapper");
       const frame = document.getElementById("windyMapFrame");
-      if (!wrap || !frame) return;
-      const w = wrap.clientWidth;
-      const h = wrap.clientHeight;
-      if (!w || !h) return;
+      if (!frame) return;
 
       if (windyMode === "underlay" && windyReady && frame.contentWindow) {
-        frame.style.transform = "none";
         const msg = `${camera.lat.toFixed(5)}|${camera.lon.toFixed(5)}|${camera.zoom.toFixed(3)}|${windyOverlay}|${forecastTargetMs()}`;
         if (msg !== lastWindyMsg) {
           lastWindyMsg = msg;
@@ -1542,12 +1566,7 @@
         return;
       }
 
-      const zI = windyEmbedView.zoom || Math.round(camera.zoom);
-      const scale = 2 ** (camera.zoom - zI);
-      const s = mapScale(camera.zoom);
-      const tx = w / 2 - scale * (w / 2) + (mercX(windyEmbedView.lon) - mercX(camera.lon)) * s;
-      const ty = h / 2 - scale * (h / 2) + (mercY(windyEmbedView.lat) - mercY(camera.lat)) * s;
-      frame.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      if (windyMode === "embed") scheduleEmbedCameraSync(false);
     }
 
     function syncWindyLayerButtons() {
@@ -1575,7 +1594,7 @@
         updateInfoPanel();
       }
       lastWindyMsg = "";
-      if (windyMode === "embed") mountWindyFrame("embed");
+      if (windyMode === "embed") scheduleEmbedCameraSync(true);
       else layoutWindyUnderlay();
     }
 
@@ -1611,11 +1630,11 @@
         camera.targetZoom = camera.zoom;
       }
 
-      if (worldLand) {
+      if (worldLand && camera.zoom <= 5.5) {
         mapCtx.beginPath();
         appendGeom(mapCtx, worldLand.geometry || worldLand, w, h);
-        mapCtx.strokeStyle = "rgba(148, 163, 184, 0.28)";
-        mapCtx.lineWidth = 0.7;
+        mapCtx.strokeStyle = "rgba(148, 163, 184, 0.22)";
+        mapCtx.lineWidth = 0.6;
         mapCtx.stroke();
       }
 
@@ -2098,6 +2117,7 @@
         mapInteract.active = false;
         mapInteract.mode = null;
         mapCanvas.classList.remove("is-dragging");
+        if (windyMode === "embed") scheduleEmbedCameraSync(wasMoved || wasPinch);
         if (!wasMoved && !wasPinch) {
           const now = Date.now();
           const geo = unproject(x, y, mapCanvas.width, mapCanvas.height);
@@ -2128,6 +2148,7 @@
       const { x, y } = canvasCoords(e);
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
       zoomAt(x, y, clampZoom(camera.zoom - Math.log2(factor)));
+      if (windyMode === "embed") scheduleEmbedCameraSync(false);
     }, { passive: false });
 
     // 阻檔 iOS Safari 地圖區雙指縮放整頁
@@ -2152,8 +2173,7 @@
       windyOverlay = btn.dataset.ov;
       lastWindyMsg = "";
       syncWindyLayerButtons();
-      if (windyMode === "embed") mountWindyFrame("embed");
-      else layoutWindyUnderlay();
+      mountWindyFrame(windyMode);
     });
 
     window.addEventListener("message", (e) => {
@@ -2191,7 +2211,8 @@
     camera.lon = camera.targetLon;
     camera.lat = camera.targetLat;
     syncWindyLayerButtons();
-    mountWindyFrame("embed");
+    // 先試 Map Forecast 無地名底圖；401 則退回公開 embed（仍全鋪，停手再對齊）
+    mountWindyFrame("underlay");
     syncTimeOverlay();
     drawMap();
     setInterval(() => {

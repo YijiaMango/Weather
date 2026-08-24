@@ -51,7 +51,7 @@
       try { parent.postMessage(Object.assign({ type }, extra || {}), "*"); } catch (_) {}
     }
 
-    const failTimer = setTimeout(() => ping("windy-fail", { reason: "timeout" }), 9000);
+    const failTimer = setTimeout(() => ping("windy-fail", { reason: "timeout" }), 3500);
     window.addEventListener("error", () => ping("windy-fail", { reason: "error" }));
 
     function stripUiAndLabels(map, store) {
