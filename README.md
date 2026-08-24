@@ -13,7 +13,7 @@
 
 - **瀏海（全寬、黏頂）**：標題、目前縣市／鄉鎮、00–23 拉桿、降雨機率／氣溫圖、未來 7 日
 - **左**：行政區地圖 + 氣象署雷達疊圖
-- **右**：附近公開 webcam、Windy embed（雨／風／氣壓／雷達）
+- **右**：附近公開 webcam、Windy 地圖（圖層用 Windy 原生選單）
 - **底（全寬）**：測站雨量、氣象署預報、GFS 模式欄
 
 手機順序：瀏海 → 地圖 → Windy → 數值卡。單擊選區、雙擊在定位與全台之間切換。無縣市下拉。
@@ -77,6 +77,12 @@ npx serve .
 
 ## 技術
 
-- HTML / Canvas / JavaScript
-- 圖資：[taiwan-atlas](https://github.com/dkaoster/taiwan-atlas)
-- [`topojson-client`](https://github.com/topojson/topojson-client)（CDN）
+單頁、無 bundler。地圖畫在 Canvas；氣象署／Windy 用 `fetch` 與 embed。
+
+| | |
+|--|--|
+| 前端 | HTML / CSS / Canvas / JavaScript |
+| 圖資 | [taiwan-atlas](https://github.com/dkaoster/taiwan-atlas) TopoJSON，本機檔 `weather-data/tw-topo.js` |
+| 解碼 | [topojson-client](https://github.com/topojson/topojson-client) v3（jsDelivr CDN） |
+| 字型 | Noto Sans TC（Google Fonts） |
+| 發布 | GitHub Pages（`main` 根目錄） |

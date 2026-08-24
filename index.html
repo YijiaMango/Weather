@@ -294,21 +294,6 @@
       border: 0;
       display: block;
     }
-    .windy-tabs {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-bottom: 8px;
-    }
-    .windy-tabs button {
-      padding: 5px 10px;
-      font-size: 0.75rem;
-    }
-    .windy-tabs button.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      font-weight: 600;
-    }
     .webcam-frame {
       margin-bottom: 10px;
       border-radius: 10px;
@@ -359,7 +344,16 @@
     }
     .week-day .wd { font-size: 0.72rem; color: var(--text-sub); line-height: 1.2; }
     .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; line-height: 1.2; }
-    .week-day .mm { font-size: 0.78rem; color: #38bdf8; margin-top: 4px; line-height: 1.25; }
+    .week-day .mm {
+      font-size: 0.7rem;
+      color: #38bdf8;
+      margin-top: 4px;
+      line-height: 1.2;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .week-day .pp { font-size: 0.72rem; color: #34d399; margin-top: 2px; line-height: 1.2; }
     @media (max-width: 560px) {
       .week-strip { gap: 4px; }
@@ -438,7 +432,7 @@
         <div class="chart-legend">
           <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
           <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
+          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>淡欄：Windy 推估</span>
         </div>
       </div>
     </div>
@@ -459,14 +453,8 @@
           <div class="webcam-frame" id="webcamFrame">
             <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
           </div>
-          <div class="windy-tabs">
-            <button type="button" data-overlay="rain" class="active">雨</button>
-            <button type="button" data-overlay="wind">風</button>
-            <button type="button" data-overlay="pressure">氣壓</button>
-            <button type="button" data-overlay="radar">雷達</button>
-          </div>
           <div class="windy-map-wrap">
-            <iframe id="windyMapFrame" title="Windy 模式圖" loading="lazy"></iframe>
+            <iframe id="windyMapFrame" title="Windy 模式圖" src="./windy-map.html"></iframe>
           </div>
         </div>
       </div>
@@ -494,12 +482,12 @@
           <div class="metric-box"><div class="metric-label">舒適度</div><div class="metric-value sm" id="valCi">—</div></div>
           <div class="metric-box span2"><div class="metric-label">風向／風速</div><div class="metric-value sm" id="valWind">—</div></div>
           <div class="metric-box"><div class="metric-label">紫外線</div><div class="metric-value sm" id="valUvi">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式風速</div><div class="metric-value" id="windyWind">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式氣壓</div><div class="metric-value" id="windyPres">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式濕度</div><div class="metric-value" id="windyRh">—</div></div>
-          <div class="metric-box"><div class="metric-label">模式時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 風速</div><div class="metric-value" id="windyWind">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 氣壓</div><div class="metric-value" id="windyPres">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 濕度</div><div class="metric-value" id="windyRh">—</div></div>
+          <div class="metric-box"><div class="metric-label">Windy 時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
           <div class="metric-box span2"><div class="metric-label">預報解析度</div><div class="metric-value sm" id="valRes">—</div></div>
         </div>
         <div class="hint" id="levelHint" style="margin-top:10px;">目前層級：縣市總覽</div>
@@ -606,9 +594,30 @@
     function formatDayLabel(dayOffset) {
       const d = forecastDate(dayOffset);
       const md = `${d.getMonth() + 1}/${d.getDate()}`;
-      if (dayOffset === 0) return { wd: "今天", md };
-      if (dayOffset === 1) return { wd: "明天", md };
-      return { wd: `週${WEEKDAY_SHORT[d.getDay()]}`, md };
+      if (dayOffset === 0) return { wd: "今", md };
+      if (dayOffset === 1) return { wd: "明", md };
+      return { wd: WEEKDAY_SHORT[d.getDay()], md };
+    }
+
+    function compactWx(wx) {
+      const s = String(wx || "").replace(/\s/g, "");
+      if (!s || s === "—") return "—";
+      const pm = /午後/.test(s);
+      let core;
+      if (/雪/.test(s)) core = "雪";
+      else if (/雹/.test(s)) core = "冰雹";
+      else if (/雷/.test(s)) core = "雷雨";
+      else if (/陣雨/.test(s)) core = "陣雨";
+      else if (/雨/.test(s)) core = "雨";
+      else if (/晴時多雲/.test(s)) core = "晴多雲";
+      else if (/多雲時晴/.test(s)) core = "多雲晴";
+      else if (/多雲時陰/.test(s)) core = "多雲陰";
+      else if (/陰時多雲/.test(s)) core = "陰多雲";
+      else if (s === "多雲" || /多雲/.test(s)) core = "多雲";
+      else if (s === "陰" || (/陰/.test(s) && !/晴/.test(s))) core = "陰";
+      else if (s === "晴" || /晴/.test(s)) core = "晴";
+      else core = s.slice(0, 4);
+      return pm && /雨/.test(core) ? "午後" + core : core;
     }
 
     function syncTimeOverlay() {
@@ -758,13 +767,16 @@
       for (let day = 0; day < 7; day++) {
         const { wd, md } = formatDayLabel(day);
         const outlook = ready ? dailyOutlook(day) : { maxPop: 0, avgPop: 0, wx: "—" };
+        const wxFull = ready ? (outlook.wx || "—") : "—";
+        const wxShort = compactWx(wxFull);
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "week-day" + (day === currentDayOffset ? " active" : "");
+        if (wxFull && wxFull !== "—") btn.title = wxFull;
         btn.innerHTML =
           `<div class="wd">${wd}</div>` +
           `<div class="md">${md}</div>` +
-          `<div class="mm">${ready ? (outlook.wx || "—") : "—"}</div>` +
+          `<div class="mm">${wxShort}</div>` +
           `<div class="pp">${ready && outlook.maxPop != null ? outlook.maxPop + "%" : "—"}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
@@ -1224,10 +1236,10 @@
       const resMap = {
         "3h": "3 小時降雨機率＋逐時氣溫",
         "12h": "12 小時時段",
-        blend: "12 小時時段 × 模式平均",
+        blend: "氣象署 12h × Windy 推估",
         "1h": "逐時氣溫",
         cache: "本機當日紀錄",
-        windy: "Windy GFS 模式補值"
+        windy: "Windy 推估（氣象署無此時段）"
       };
       document.getElementById("valRes").textContent = resMap[data.resolution] || data.resolution || "—";
 
@@ -1251,7 +1263,7 @@
       }
 
       const tag = data.resolution === "windy" ? "Windy GFS"
-        : data.resolution === "blend" ? "氣象署×模式"
+        : data.resolution === "blend" ? "氣象署×Windy"
         : data.resolution === "cache" ? "當日紀錄"
         : "中央氣象署";
       advice.textContent = data.desc
@@ -1382,7 +1394,6 @@
       scheduleWindy();
     }
 
-    let windyOverlay = "rain";
     let windyTimer = 0;
 
     function windyFocus() {
@@ -1440,12 +1451,40 @@
       box.appendChild(cap);
     }
 
+    let windyMapReady = false;
+
     function syncWindyMap(lat, lon) {
       const frame = document.getElementById("windyMapFrame");
       if (!frame || !window.WINDY) return;
-      const src = WINDY.embedMapUrl(lat, lon, windyOverlay, forecastTargetMs());
-      if (frame.getAttribute("src") !== src) frame.src = src;
+      const payload = {
+        type: "windy-sync",
+        key: WINDY.MAP_KEY,
+        lat,
+        lon,
+        zoom: 8,
+        timestamp: forecastTargetMs()
+      };
+      if (!windyMapReady || !frame.contentWindow) {
+        frame.dataset.pending = JSON.stringify(payload);
+        return;
+      }
+      frame.contentWindow.postMessage(payload, "*");
     }
+
+    window.addEventListener("message", (e) => {
+      if (e.data?.type !== "windy-ready") return;
+      const frame = document.getElementById("windyMapFrame");
+      if (!frame || e.source !== frame.contentWindow) return;
+      windyMapReady = true;
+      const pending = frame.dataset.pending;
+      if (pending) {
+        frame.contentWindow.postMessage(JSON.parse(pending), "*");
+        delete frame.dataset.pending;
+        return;
+      }
+      const { lon, lat } = windyFocus();
+      syncWindyMap(lat, lon);
+    });
 
     async function refreshWindy() {
       if (!window.WINDY) return;
@@ -1640,7 +1679,7 @@
         chartCtx.fillStyle = "#64748b";
         chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
         chartCtx.textAlign = "center";
-        chartCtx.fillText(window.WINDY?.cache?.point ? "此日無可用降雨資料" : "載入預報與模式補值中…", w / 2, h / 2);
+        chartCtx.fillText(window.WINDY?.cache?.point ? "此日無可用降雨資料" : "載入氣象署預報與 Windy 推估中…", w / 2, h / 2);
         return;
       }
 
@@ -2065,14 +2104,6 @@
     bootstrapCwa().finally(() => {
       locateDevice(true);
       scheduleWindy();
-    });
-    document.querySelectorAll(".windy-tabs button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        windyOverlay = btn.dataset.overlay;
-        document.querySelectorAll(".windy-tabs button").forEach((b) => b.classList.toggle("active", b === btn));
-        const { lon, lat } = windyFocus();
-        syncWindyMap(lat, lon);
-      });
     });
     // 雨量站背景更新（右側面板）
     setInterval(async () => {
