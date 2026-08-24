@@ -1,0 +1,8 @@
+---
+description: 發布走 Cursor hook，禁止背景 push 迴圈
+alwaysApply: true
+---
+
+不要開 background shell、`/loop` 或定時 wake 去做 git commit/push。
+
+此專案的自動發布是 `.cursor/hooks.json` 的 `stop` hook（`.cursor/hooks/auto-publish.ps1`），agent 回合結束就會推。改完檔不必再手動說 push，也不要再啟動持續檢查迴圈。
