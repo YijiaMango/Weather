@@ -208,28 +208,7 @@
       font-weight: bold;
       color: #38bdf8;
     }
-    .stat-block {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      margin-top: 8px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      background: rgba(255, 255, 255, 0.06);
-      column-gap: 1px;
-      row-gap: 1px;
-    }
-    @media (min-width: 821px) {
-      .stat-block { grid-template-columns: repeat(4, 1fr); }
-      .stat-block .metric-box.span2 { grid-column: span 2; }
-    }
-    .stat-block .metric-box {
-      background: #0f172a;
-      padding: 6px 8px;
-      border-radius: 0;
-      border: 0;
-    }
-    .stat-block .metric-box.span2 { grid-column: 1 / -1; }
+    .stat-block,
     .windy-fields {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -237,14 +216,18 @@
       margin-top: 10px;
     }
     @media (min-width: 821px) {
+      .stat-block,
       .windy-fields { grid-template-columns: repeat(4, 1fr); }
+      .stat-block .metric-box.span2 { grid-column: span 2; }
     }
+    .stat-block .metric-box,
     .windy-fields .metric-box {
       background: none;
       border: 0;
       padding: 0;
       border-radius: 0;
     }
+    .stat-block .metric-box.span2 { grid-column: 1 / -1; }
     .card.windy-card {
       background: transparent;
       border: 0;
