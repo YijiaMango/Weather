@@ -345,17 +345,6 @@
       border: 0;
       display: block;
     }
-    /* embed 沒有關 +/- 的參數；蓋掉 #embed-zoom，留下圖層膠囊 */
-    .windy-zoom-mask {
-      position: absolute;
-      right: 0;
-      top: 46px;
-      width: 52px;
-      height: 128px;
-      z-index: 3;
-      background: #080d1a;
-      pointer-events: auto;
-    }
     .windy-credit {
       position: absolute;
       left: 8px;
@@ -551,7 +540,6 @@
           </div>
           <div class="windy-map-wrap">
             <iframe id="windyMapFrame" title="Windy 模式圖"></iframe>
-            <div class="windy-zoom-mask" aria-hidden="true"></div>
             <a class="windy-credit" href="https://www.windy.com/" target="_blank" rel="noopener">Windy</a>
           </div>
         </div>

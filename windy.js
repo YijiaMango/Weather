@@ -170,7 +170,9 @@
   }
 
   function embedMapUrl(_lat, _lon, overlay = "rain", targetMs = Date.now()) {
-    const hoursAhead = Math.max(0, Math.min(240, Math.round((targetMs - Date.now()) / 36e5)));
+    const now = new Date();
+    const nowHourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
+    const hoursAhead = Math.max(-24, Math.min(240, Math.round((targetMs - nowHourStart) / 36e5)));
     const q = new URLSearchParams({
       lat: "23.72",
       lon: "120.97",
@@ -180,8 +182,8 @@
       menu: "",
       message: "",
       marker: "",
-      calendar: hoursAhead === 0 ? "" : "in",
-      forecast: hoursAhead === 0 ? "" : String(hoursAhead),
+      calendar: "in",
+      forecast: String(hoursAhead),
       pressure: overlay === "pressure" ? "true" : "",
       type: "map",
       location: "coordinates",
