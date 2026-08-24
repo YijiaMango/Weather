@@ -835,14 +835,30 @@
     function dailyOutlook(day) {
       const series = filledHourlySeries(day);
       const popHours = series.filter((h) => h.pop != null);
+      const packOutlook = (window.CWA && activeCountyName())
+        ? CWA.dayOutlookFromPack(activeCountyName(), activeTownName() || null, day)
+        : null;
+      const wxHour = series.find((h) => h.hour === 12 && h.wx) || series.find((h) => h.wx);
+      const temps = [];
+      for (const h of series) {
+        const n = parseFloat(h.t);
+        if (!Number.isNaN(n)) temps.push(n);
+      }
       if (!popHours.length) {
-        return { maxPop: null, avgPop: null, wx: "—", minT: "—", maxT: "—", count: 0, peakHour: 12 };
+        return {
+          maxPop: packOutlook?.maxPop ?? null,
+          avgPop: packOutlook?.avgPop ?? null,
+          wx: wxHour?.wx || packOutlook?.wx || "—",
+          minT: temps.length ? String(Math.round(Math.min(...temps))) : (packOutlook?.minT || "—"),
+          maxT: temps.length ? String(Math.round(Math.max(...temps))) : (packOutlook?.maxT || "—"),
+          count: packOutlook?.count || 0,
+          peakHour: 12
+        };
       }
       let maxPop = 0;
       let sum = 0;
       let peakHour = 12;
       let wx = "—";
-      const temps = [];
       for (const h of popHours) {
         sum += h.pop;
         if (h.pop >= maxPop) {
@@ -851,10 +867,7 @@
           if (h.wx) wx = h.wx;
         }
       }
-      for (const h of series) {
-        const n = parseFloat(h.t);
-        if (!Number.isNaN(n)) temps.push(n);
-      }
+      if (wx === "—") wx = wxHour?.wx || packOutlook?.wx || "—";
       return {
         maxPop,
         avgPop: Math.round(sum / popHours.length),
@@ -1809,7 +1822,8 @@
 
       const hourlyData = activeHourlySeries(currentDayOffset);
       const hasAny = hourlyData.some((d) => d.pop != null);
-      if (!hasAny) {
+      const hasMeta = hourlyData.some((d) => d.wx || (d.t && d.t !== ""));
+      if (!hasAny && !hasMeta) {
         chartCtx.fillStyle = "#64748b";
         chartCtx.font = "13px \"Noto Sans TC\", sans-serif";
         chartCtx.textAlign = "center";

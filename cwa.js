@@ -802,27 +802,36 @@
   }
 
   function dayOutlook(periods, dayOffset) {
-    const targetDay = addDaysKey(todayKey(), dayOffset);
-    const list = (periods || []).filter((p) => dayKey(p.start) === targetDay && p.pop != null);
+    const list = (periods || []).filter((p) => {
+      for (let h = 0; h < 24; h++) if (coversHour(p, dayOffset, h)) return true;
+      return false;
+    });
     if (!list.length) return { maxPop: null, avgPop: null, wx: "—", minT: "—", maxT: "—", count: 0, periods: [] };
-    let maxPop = 0;
+    const withPop = list.filter((p) => p.pop != null);
+    let maxPop = null;
     let sum = 0;
     let minT = 99;
     let maxT = -99;
-    let wx = list[0].wx || "—";
+    const noon = list.find((p) => hourOf(p.start) === 6 || hourOf(p.start) === 12) || list[0];
+    let wx = noon?.wx || "—";
     for (const p of list) {
-      maxPop = Math.max(maxPop, p.pop);
-      sum += p.pop;
+      if (p.pop != null) {
+        if (maxPop == null || p.pop > maxPop) {
+          maxPop = p.pop;
+          if (p.wx) wx = p.wx;
+        }
+        sum += p.pop;
+      }
       const a = parseInt(p.minT, 10);
       const b = parseInt(p.maxT, 10);
       if (!Number.isNaN(a)) minT = Math.min(minT, a);
       if (!Number.isNaN(b)) maxT = Math.max(maxT, b);
-      if (p.pop === maxPop && p.wx) wx = p.wx;
+      if (wx === "—" && p.wx) wx = p.wx;
     }
     return {
       maxPop,
-      avgPop: Math.round(sum / list.length),
-      wx,
+      avgPop: withPop.length ? Math.round(sum / withPop.length) : null,
+      wx: wx || "—",
       minT: minT === 99 ? "—" : String(minT),
       maxT: maxT === -99 ? "—" : String(maxT),
       count: list.length,
