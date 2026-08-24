@@ -584,11 +584,11 @@
       </div>
       <dl>
         <dt>資料來源</dt>
-        <dd>中央氣象署 Open Data（縣市 36h、鄉鎮 3 天／一週、自動雨量站）· 官網雷達 <code>CV1_TW_1000</code>（僅今天）· Windy Point Forecast（GFS）／公開 embed 地圖／webcam</dd>
+        <dd>中央氣象署開放資料：縣市 36 小時預報、鄉鎮三日及一週預報、自動雨量站觀測；官網雷達回波 <code>CV1_TW_1000</code>（限當日）。Windy Point Forecast（GFS）、公開地圖嵌入及網路攝影機。</dd>
         <dt>圖表</dt>
-        <dd>數值有兩邊時取平均（氣溫／濕度／風速）。實心柱為氣象署降雨機率；半透明柱為該小時官方沒資料、改用 Windy GFS。綠線為氣溫。測站雨量為觀測，不與模式混算。</dd>
+        <dd>氣溫、相對濕度與風速若雙方均有數值，採算術平均。降雨機率以中央氣象署為準；官方無該時段資料時，改以 Windy GFS 推估，圖上以半透明直柱表示。綠線為氣溫。測站雨量為實測，不與模式資料混合。</dd>
         <dt>地圖</dt>
-        <dd>行政區界來自 taiwan-atlas TopoJSON。雙擊切換定位／全台。</dd>
+        <dd>行政區界採用 taiwan-atlas TopoJSON。於地圖上雙擊，可在目前位置與全台總覽之間切換。</dd>
       </dl>
     </div>
   </div>
@@ -935,7 +935,7 @@
           renderWeekStrip();
           updateInfoPanel();
           drawChart();
-          scheduleWindy();
+          scheduleWindyMap();
         });
         weekStrip.appendChild(btn);
       }
@@ -1657,9 +1657,13 @@
       }
     }
 
-    function scheduleWindy() {
+    function scheduleWindyMap() {
       const { lon, lat } = windyFocus();
       syncWindyMap(lat, lon);
+    }
+
+    function scheduleWindy() {
+      scheduleWindyMap();
       clearTimeout(windyTimer);
       windyTimer = setTimeout(refreshWindy, 280);
     }
@@ -2216,7 +2220,7 @@
       updateInfoPanel();
       drawChart();
       drawMap();
-      scheduleWindy();
+      scheduleWindyMap();
     });
 
     function resizeCanvases() {
@@ -2253,7 +2257,7 @@
       updateInfoPanel();
       drawChart();
       drawMap();
-      scheduleWindy();
+      scheduleWindyMap();
     }, 30 * 1000);
     document.title = "YijiaMango Weather - 台灣降雨小幫手";
     bootstrapCwa().finally(() => {

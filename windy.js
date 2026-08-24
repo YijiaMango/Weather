@@ -12,9 +12,16 @@
 
   const cache = {
     point: null,
+    place: "",
     webcam: null,
     at: 0
   };
+
+  const POINT_TTL_MS = 45 * 60 * 1000;
+
+  function pointPlace(lat, lon) {
+    return `${Number(lat).toFixed(2)},${Number(lon).toFixed(2)}`;
+  }
 
   function hypot(a, b) {
     return Math.sqrt(a * a + b * b);
@@ -34,6 +41,10 @@
   }
 
   async function loadPoint(lat, lon) {
+    const place = pointPlace(lat, lon);
+    if (cache.point?.ts?.length && cache.place === place && Date.now() - cache.at < POINT_TTL_MS) {
+      return cache.point;
+    }
     const res = await fetch(POINT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,8 +58,12 @@
       })
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.message || `POINT_HTTP_${res.status}`);
+    if (!res.ok) {
+      if (cache.point?.ts?.length) return cache.point;
+      throw new Error(json.message || `POINT_HTTP_${res.status}`);
+    }
     cache.point = json;
+    cache.place = place;
     cache.at = Date.now();
     return json;
   }
