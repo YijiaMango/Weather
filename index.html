@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>YijiaMango Weather - 台灣降雨小幫手</title>
   <meta name="application-name" content="YijiaMango Weather" />
   <meta name="description" content="台灣縣市／鄉鎮降雨地圖，整合中央氣象署與 Windy 公開資料。" />
@@ -49,7 +49,7 @@
       flex-direction: column;
       align-items: center;
       min-height: 100vh;
-      padding: 16px;
+      padding: 0 16px 16px;
     }
     .app-container {
       width: 100%;
@@ -58,16 +58,26 @@
       flex-direction: column;
       gap: 16px;
     }
-    .top-bar {
+    .sticky-bangs {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--bg-card);
+      padding: max(10px, env(safe-area-inset-top)) 14px 12px;
+      border: 1px solid var(--border);
+      border-radius: 0 0 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+      flex-shrink: 0;
+    }
+    .bangs-head {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
+      gap: 6px 16px;
+      align-items: baseline;
       justify-content: space-between;
-      background: var(--bg-card);
-      padding: 14px 18px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
     }
     .brand-title {
       font-size: 1.25rem;
@@ -131,7 +141,6 @@
       .main-grid { grid-template-columns: 1fr; }
       .map-stack { display: contents; }
       .canvas-container { order: 1; }
-      .timeline-card { order: 2; }
       .info-panel { order: 3; }
       .location-card { order: 4; grid-column: auto; }
     }
@@ -236,13 +245,9 @@
     .badge-mid { background: #78350f; color: #fbbf24; }
     .badge-high { background: #7f1d1d; color: #f87171; }
     .timeline-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
     }
     .time-slider-wrapper {
       display: flex;
@@ -256,7 +261,7 @@
     }
     canvas#chartCanvas {
       width: 100%;
-      height: 168px;
+      height: 112px;
       display: block;
     }
     .chart-legend {
@@ -339,7 +344,7 @@
       background: #0f172a;
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 8px 4px;
+      padding: 6px 3px;
       text-align: center;
       cursor: pointer;
       color: var(--text-main);
@@ -417,11 +422,24 @@
 </head>
 <body>
   <div class="app-container">
-    <div class="top-bar">
-      <div>
+    <div class="sticky-bangs">
+      <div class="bangs-head">
         <div class="brand-title">YijiaMango Weather 台灣降雨小幫手</div>
-        <div style="font-size:0.8rem;color:var(--text-sub);margin-top:4px;">整合中央氣象署與 Windy 公開資料</div>
-        <div class="breadcrumb" id="breadcrumb" style="margin-top:6px;"></div>
+        <div class="breadcrumb" id="breadcrumb"></div>
+      </div>
+      <div class="timeline-card">
+        <div class="time-slider-wrapper">
+          <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
+          <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
+          <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
+        </div>
+        <canvas id="chartCanvas"></canvas>
+        <div class="week-strip" id="weekStrip"></div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
+        </div>
       </div>
     </div>
 
@@ -434,20 +452,6 @@
           <canvas id="mapCanvas"></canvas>
         </div>
 
-        <div class="timeline-card">
-          <div class="time-slider-wrapper">
-            <span style="font-size: 0.85rem; color: var(--text-sub);">00:00</span>
-            <input type="range" id="timeSlider" min="0" max="23" value="12" step="1" />
-            <span style="font-size: 0.85rem; color: var(--text-sub);" id="timeSliderLabel">12:00</span>
-          </div>
-          <canvas id="chartCanvas"></canvas>
-          <div class="week-strip" id="weekStrip"></div>
-          <div class="chart-legend">
-            <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
-            <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-            <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>模式補值</span>
-          </div>
-        </div>
       </div>
 
       <div class="info-panel">
@@ -2033,8 +2037,10 @@
       mapCanvas.width = wrap.clientWidth;
       mapCanvas.height = wrap.clientHeight;
       const chartCard = chartCanvas.parentElement;
-      chartCanvas.width = chartCard.clientWidth - 32;
-      chartCanvas.height = 168;
+      const cs = getComputedStyle(chartCard);
+      const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      chartCanvas.width = Math.max(1, chartCard.clientWidth - padX);
+      chartCanvas.height = 112;
       updateInfoPanel();
       drawChart();
     }
