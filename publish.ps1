@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $repo "og.png"))) {
   Write-Warning "og.png missing — LINE preview image may be empty"
 }
 
-git add index.html cwa.js weather-data og.png README.md verify-publish.js publish.ps1 2>$null
+git add index.html cwa.js windy.js weather-data og.png README.md verify-publish.js publish.ps1 2>$null
 git add -u
 $status = git status --porcelain
 if (-not $status) {
