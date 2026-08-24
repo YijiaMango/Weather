@@ -387,8 +387,16 @@
       border-color: var(--accent);
       background: rgba(58, 134, 255, 0.14);
     }
-    .week-day .wd { font-size: 0.72rem; color: var(--text-sub); line-height: 1.2; }
-    .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; line-height: 1.2; }
+    .week-day .when {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 3px;
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+    .week-day .wd { font-size: 0.72rem; color: var(--text-sub); }
+    .week-day .md { font-size: 0.78rem; font-weight: 700; }
     .week-day .mm {
       font-size: 1.15rem;
       line-height: 1;
@@ -870,8 +878,7 @@
         const popTip = ready && outlook.maxPop != null ? `降雨機率 ${outlook.maxPop}%` : "";
         btn.title = [compactWx(wxFull) !== "—" ? wxFull : "", popTip].filter(Boolean).join(" · ");
         btn.innerHTML =
-          `<div class="wd">${wd}</div>` +
-          `<div class="md">${md}</div>` +
+          `<div class="when"><span class="wd">${wd}</span><span class="md">${md}</span></div>` +
           `<div class="mm">${wxSymbol(wxFull)}</div>` +
           `<div class="drops">${drops}</div>`;
         btn.addEventListener("click", () => {
