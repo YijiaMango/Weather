@@ -230,6 +230,26 @@
       border: 0;
     }
     .stat-block .metric-box.span2 { grid-column: 1 / -1; }
+    .windy-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 14px;
+      margin-top: 10px;
+    }
+    @media (min-width: 821px) {
+      .windy-fields { grid-template-columns: repeat(4, 1fr); }
+    }
+    .windy-fields .metric-box {
+      background: none;
+      border: 0;
+      padding: 0;
+      border-radius: 0;
+    }
+    .card.windy-card {
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
     .metric-label { font-size: 0.68rem; color: var(--text-sub); line-height: 1.2; }
     .metric-value { font-size: 1rem; font-weight: 600; margin-top: 1px; }
     .metric-value.sm { font-size: 0.82rem; line-height: 1.25; font-weight: 600; }
@@ -264,13 +284,28 @@
       height: 112px;
       display: block;
     }
+    .tech-notes {
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      line-height: 1.55;
+    }
     .chart-legend {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px 16px;
-      font-size: 0.78rem;
-      color: var(--text-sub);
-      justify-content: flex-start;
+      gap: 8px 16px;
+      margin-bottom: 8px;
+    }
+    .tech-notes dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 10px;
+    }
+    .tech-notes dt {
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .tech-notes dd {
+      margin: 0;
     }
     .dot {
       width: 8px;
@@ -285,20 +320,30 @@
       height: min(38vh, 360px);
       border-radius: 10px;
       overflow: hidden;
-      border: 1px solid var(--border);
       background: #080d1a;
     }
     .windy-map-wrap iframe {
       width: 100%;
-      height: 100%;
+      height: calc(100% + 66px);
       border: 0;
       display: block;
     }
+    .windy-credit {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      z-index: 2;
+      color: #e2e8f0;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-decoration: none;
+      text-shadow: 0 1px 3px #000;
+    }
+    .windy-credit:hover { color: #38bdf8; }
     .webcam-frame {
       margin-bottom: 10px;
       border-radius: 10px;
       overflow: hidden;
-      border: 1px solid var(--border);
       background: #080d1a;
       min-height: 120px;
     }
@@ -345,20 +390,31 @@
     .week-day .wd { font-size: 0.72rem; color: var(--text-sub); line-height: 1.2; }
     .week-day .md { font-size: 0.85rem; font-weight: 700; margin-top: 2px; line-height: 1.2; }
     .week-day .mm {
-      font-size: 0.7rem;
-      color: #38bdf8;
-      margin-top: 4px;
-      line-height: 1.2;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 1.15rem;
+      line-height: 1;
+      margin-top: 5px;
     }
-    .week-day .pp { font-size: 0.72rem; color: #34d399; margin-top: 2px; line-height: 1.2; }
+    .week-day .drops {
+      display: flex;
+      gap: 3px;
+      justify-content: center;
+      align-items: center;
+      margin-top: 5px;
+      min-height: 9px;
+    }
+    .week-day .drop {
+      width: 7px;
+      height: 7px;
+      background: rgba(52, 211, 153, 0.18);
+      border-radius: 0 50% 50% 50%;
+      transform: rotate(45deg);
+    }
+    .week-day .drop.on { background: #34d399; }
     @media (max-width: 560px) {
       .week-strip { gap: 4px; }
       .week-day { padding: 6px 2px; }
-      .week-day .mm, .week-day .pp { font-size: 0.68rem; }
+      .week-day .mm { font-size: 1.05rem; }
+      .week-day .drop { width: 6px; height: 6px; }
     }
     .sat-card {
       background: var(--bg-card);
@@ -429,11 +485,6 @@
         </div>
         <canvas id="chartCanvas"></canvas>
         <div class="week-strip" id="weekStrip"></div>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
-          <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
-          <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>淡欄：Windy 推估</span>
-        </div>
       </div>
     </div>
 
@@ -454,7 +505,8 @@
             <div class="webcam-cap" id="webcamCap">選縣市／鄉鎮後載入附近攝影機</div>
           </div>
           <div class="windy-map-wrap">
-            <iframe id="windyMapFrame" title="Windy 模式圖" src="./windy-map.html"></iframe>
+            <iframe id="windyMapFrame" title="Windy 模式圖"></iframe>
+            <a class="windy-credit" href="https://www.windy.com/" target="_blank" rel="noopener">Windy</a>
           </div>
         </div>
       </div>
@@ -482,17 +534,35 @@
           <div class="metric-box"><div class="metric-label">舒適度</div><div class="metric-value sm" id="valCi">—</div></div>
           <div class="metric-box span2"><div class="metric-label">風向／風速</div><div class="metric-value sm" id="valWind">—</div></div>
           <div class="metric-box"><div class="metric-label">紫外線</div><div class="metric-value sm" id="valUvi">—</div></div>
+          <div class="metric-box span2"><div class="metric-label">預報解析度</div><div class="metric-value sm" id="valRes">—</div></div>
+        </div>
+        <div class="windy-fields">
           <div class="metric-box"><div class="metric-label">Windy 近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
           <div class="metric-box"><div class="metric-label">Windy 氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
           <div class="metric-box"><div class="metric-label">Windy 風速</div><div class="metric-value" id="windyWind">—</div></div>
           <div class="metric-box"><div class="metric-label">Windy 氣壓</div><div class="metric-value" id="windyPres">—</div></div>
           <div class="metric-box"><div class="metric-label">Windy 濕度</div><div class="metric-value" id="windyRh">—</div></div>
           <div class="metric-box"><div class="metric-label">Windy 時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
-          <div class="metric-box span2"><div class="metric-label">預報解析度</div><div class="metric-value sm" id="valRes">—</div></div>
         </div>
         <div class="hint" id="levelHint" style="margin-top:10px;">目前層級：縣市總覽</div>
         <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; margin-top: 6px;" id="weatherAdvice"></div>
       </div>
+    </div>
+
+    <div class="tech-notes">
+      <div class="chart-legend">
+        <span><span class="dot" style="background:linear-gradient(90deg,#22c55e,#3b82f6,#7c3aed);"></span>降雨機率（低→高）</span>
+        <span><span class="dot" style="background:#4ade80;"></span>氣溫</span>
+        <span><span class="dot" style="background:rgba(96,165,250,0.45);"></span>Windy 推估</span>
+      </div>
+      <dl>
+        <dt>資料來源</dt>
+        <dd>中央氣象署 Open Data（縣市 36h、鄉鎮 3 天／一週、自動雨量站）· 官網雷達 <code>CV1_TW_1000</code>（僅今天）· Windy Point Forecast（GFS）／公開 embed 地圖／webcam</dd>
+        <dt>圖表</dt>
+        <dd>實心柱為氣象署降雨機率；半透明柱為該小時官方沒資料、改用 Windy GFS 推估。綠線為氣溫。</dd>
+        <dt>地圖</dt>
+        <dd>行政區界來自 taiwan-atlas TopoJSON。雙擊切換定位／全台。</dd>
+      </dl>
     </div>
   </div>
 
@@ -618,6 +688,30 @@
       else if (s === "晴" || /晴/.test(s)) core = "晴";
       else core = s.slice(0, 4);
       return pm && /雨/.test(core) ? "午後" + core : core;
+    }
+
+    function wxSymbol(wx) {
+      const s = compactWx(wx);
+      if (s === "—") return "·";
+      if (s.includes("雪")) return "❄️";
+      if (s.includes("雹")) return "🧊";
+      if (s.includes("雷")) return "⛈️";
+      if (s.includes("午後")) return "🌦️";
+      if (s.includes("陣雨") || s === "雨") return "🌧️";
+      if (s.includes("晴多雲") || s.includes("多雲晴")) return "⛅";
+      if (s.includes("陰")) return "☁️";
+      if (s === "多雲") return "☁️";
+      if (s === "晴") return "☀️";
+      return "☁️";
+    }
+
+    function dropCount(pop) {
+      if (pop == null) return 0;
+      if (pop < 15) return 0;
+      if (pop < 35) return 1;
+      if (pop < 55) return 2;
+      if (pop < 75) return 3;
+      return 4;
     }
 
     function syncTimeOverlay() {
@@ -768,16 +862,18 @@
         const { wd, md } = formatDayLabel(day);
         const outlook = ready ? dailyOutlook(day) : { maxPop: 0, avgPop: 0, wx: "—" };
         const wxFull = ready ? (outlook.wx || "—") : "—";
-        const wxShort = compactWx(wxFull);
+        const n = ready && outlook.maxPop != null ? dropCount(outlook.maxPop) : 0;
+        const drops = [0, 1, 2, 3].map((i) => `<span class="drop${i < n ? " on" : ""}"></span>`).join("");
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "week-day" + (day === currentDayOffset ? " active" : "");
-        if (wxFull && wxFull !== "—") btn.title = wxFull;
+        const popTip = ready && outlook.maxPop != null ? `降雨機率 ${outlook.maxPop}%` : "";
+        btn.title = [compactWx(wxFull) !== "—" ? wxFull : "", popTip].filter(Boolean).join(" · ");
         btn.innerHTML =
           `<div class="wd">${wd}</div>` +
           `<div class="md">${md}</div>` +
-          `<div class="mm">${wxShort}</div>` +
-          `<div class="pp">${ready && outlook.maxPop != null ? outlook.maxPop + "%" : "—"}</div>`;
+          `<div class="mm">${wxSymbol(wxFull)}</div>` +
+          `<div class="drops">${drops}</div>`;
         btn.addEventListener("click", () => {
           currentDayOffset = day;
           if (day === 0) {
@@ -1451,40 +1547,12 @@
       box.appendChild(cap);
     }
 
-    let windyMapReady = false;
-
     function syncWindyMap(lat, lon) {
       const frame = document.getElementById("windyMapFrame");
       if (!frame || !window.WINDY) return;
-      const payload = {
-        type: "windy-sync",
-        key: WINDY.MAP_KEY,
-        lat,
-        lon,
-        zoom: 8,
-        timestamp: forecastTargetMs()
-      };
-      if (!windyMapReady || !frame.contentWindow) {
-        frame.dataset.pending = JSON.stringify(payload);
-        return;
-      }
-      frame.contentWindow.postMessage(payload, "*");
+      const src = WINDY.embedMapUrl(lat, lon, "rain", forecastTargetMs());
+      if (frame.getAttribute("src") !== src) frame.src = src;
     }
-
-    window.addEventListener("message", (e) => {
-      if (e.data?.type !== "windy-ready") return;
-      const frame = document.getElementById("windyMapFrame");
-      if (!frame || e.source !== frame.contentWindow) return;
-      windyMapReady = true;
-      const pending = frame.dataset.pending;
-      if (pending) {
-        frame.contentWindow.postMessage(JSON.parse(pending), "*");
-        delete frame.dataset.pending;
-        return;
-      }
-      const { lon, lat } = windyFocus();
-      syncWindyMap(lat, lon);
-    });
 
     async function refreshWindy() {
       if (!window.WINDY) return;
