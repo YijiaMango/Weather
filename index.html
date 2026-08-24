@@ -208,20 +208,17 @@
       font-weight: bold;
       color: #38bdf8;
     }
-    .stat-block,
-    .windy-fields {
+    .stat-block {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px 14px;
       margin-top: 10px;
     }
     @media (min-width: 821px) {
-      .stat-block,
-      .windy-fields { grid-template-columns: repeat(4, 1fr); }
+      .stat-block { grid-template-columns: repeat(4, 1fr); }
       .stat-block .metric-box.span2 { grid-column: span 2; }
     }
-    .stat-block .metric-box,
-    .windy-fields .metric-box {
+    .stat-block .metric-box {
       background: none;
       border: 0;
       padding: 0;
@@ -521,19 +518,12 @@
           <div class="metric-box"><div class="metric-label">體感溫度</div><div class="metric-value" id="valAt">—</div></div>
           <div class="metric-box"><div class="metric-label">最低／最高溫</div><div class="metric-value sm" id="valMinMax">—</div></div>
           <div class="metric-box"><div class="metric-label">相對濕度</div><div class="metric-value" id="valRh">—</div></div>
+          <div class="metric-box"><div class="metric-label">氣壓</div><div class="metric-value" id="valPres">—</div></div>
           <div class="metric-box"><div class="metric-label">露點溫度</div><div class="metric-value" id="valTd">—</div></div>
           <div class="metric-box"><div class="metric-label">舒適度</div><div class="metric-value sm" id="valCi">—</div></div>
           <div class="metric-box span2"><div class="metric-label">風向／風速</div><div class="metric-value sm" id="valWind">—</div></div>
           <div class="metric-box"><div class="metric-label">紫外線</div><div class="metric-value sm" id="valUvi">—</div></div>
           <div class="metric-box span2"><div class="metric-label">預報解析度</div><div class="metric-value sm" id="valRes">—</div></div>
-        </div>
-        <div class="windy-fields">
-          <div class="metric-box"><div class="metric-label">Windy 近 3h 雨量</div><div class="metric-value" id="windyPrecip">—</div></div>
-          <div class="metric-box"><div class="metric-label">Windy 氣溫</div><div class="metric-value" id="windyTemp">—</div></div>
-          <div class="metric-box"><div class="metric-label">Windy 風速</div><div class="metric-value" id="windyWind">—</div></div>
-          <div class="metric-box"><div class="metric-label">Windy 氣壓</div><div class="metric-value" id="windyPres">—</div></div>
-          <div class="metric-box"><div class="metric-label">Windy 濕度</div><div class="metric-value" id="windyRh">—</div></div>
-          <div class="metric-box"><div class="metric-label">Windy 時刻</div><div class="metric-value sm" id="windyAt">—</div></div>
         </div>
         <div class="hint" id="levelHint" style="margin-top:10px;">目前層級：縣市總覽</div>
         <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; margin-top: 6px;" id="weatherAdvice"></div>
@@ -550,7 +540,7 @@
         <dt>資料來源</dt>
         <dd>中央氣象署 Open Data（縣市 36h、鄉鎮 3 天／一週、自動雨量站）· 官網雷達 <code>CV1_TW_1000</code>（僅今天）· Windy Point Forecast（GFS）／公開 embed 地圖／webcam</dd>
         <dt>圖表</dt>
-        <dd>實心柱為氣象署降雨機率；半透明柱為該小時官方沒資料、改用 Windy GFS 推估。綠線為氣溫。</dd>
+        <dd>數值有兩邊時取平均（氣溫／濕度／風速）。實心柱為氣象署降雨機率；半透明柱為該小時官方沒資料、改用 Windy GFS。綠線為氣溫。測站雨量為觀測，不與模式混算。</dd>
         <dt>地圖</dt>
         <dd>行政區界來自 taiwan-atlas TopoJSON。雙擊切換定位／全台。</dd>
       </dl>
@@ -1233,8 +1223,26 @@
     }
 
     function clearMetrics() {
-      ["valWx", "valPop", "valT", "valAt", "valMinMax", "valRh", "valTd", "valCi", "valWind", "valUvi", "valRes"]
+      ["valWx", "valPop", "valT", "valAt", "valMinMax", "valRh", "valPres", "valTd", "valCi", "valWind", "valUvi", "valRes"]
         .forEach((id) => { document.getElementById(id).textContent = "—"; });
+    }
+
+    function asNum(v) {
+      if (v == null || v === "" || v === "—") return null;
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function avgNum(a, b) {
+      if (a == null && b == null) return null;
+      if (a == null) return b;
+      if (b == null) return a;
+      return (a + b) / 2;
+    }
+
+    function windySnap() {
+      if (!window.WINDY?.snapshotAt || !WINDY.cache?.point) return null;
+      return WINDY.snapshotAt(WINDY.cache.point, forecastTargetMs());
     }
 
     function deg(v, suffix = "°C") {
@@ -1300,22 +1308,33 @@
         return;
       }
 
+      const w = windySnap();
+      const tMix = avgNum(asNum(data.t), w?.tempC);
+      const rhMix = avgNum(asNum(data.rh), w?.rh);
+      const windMix = avgNum(asNum(data.windSpeed), w?.windMs);
+      const mixed = w && ((asNum(data.t) != null && w.tempC != null)
+        || (asNum(data.rh) != null && w.rh != null)
+        || (asNum(data.windSpeed) != null && w.windMs != null)
+        || data.resolution === "blend");
+
       document.getElementById("valWx").textContent = data.wx || "—";
       document.getElementById("valPop").textContent = data.pop != null ? `${data.pop} %` : "—";
-      document.getElementById("valT").textContent = deg(data.t);
+      document.getElementById("valT").textContent = tMix == null ? "—" : `${tMix.toFixed(1)}°C`;
       document.getElementById("valAt").textContent = deg(data.at);
       document.getElementById("valMinMax").textContent =
         (data.minT && data.minT !== "—" && data.maxT && data.maxT !== "—")
           ? `${data.minT}–${data.maxT}°C`
           : "—";
-      document.getElementById("valRh").textContent = data.rh ? `${data.rh}%` : "—";
+      document.getElementById("valRh").textContent = rhMix == null ? "—" : `${Math.round(rhMix)}%`;
+      document.getElementById("valPres").textContent =
+        w?.pressureHpa == null ? "—" : `${Math.round(w.pressureHpa)} hPa`;
       document.getElementById("valTd").textContent = deg(data.td);
       document.getElementById("valCi").textContent =
         data.ciDesc || data.ci ? `${data.ciDesc || ""}${data.ci ? `（${data.ci}）` : ""}`.trim() : "—";
       const windParts = [];
       if (data.windDir) windParts.push(data.windDir);
-      if (data.windSpeed) windParts.push(`${data.windSpeed} m/s`);
-      if (data.beaufort) windParts.push(`${data.beaufort} 級`);
+      if (windMix != null) windParts.push(`${windMix.toFixed(1)} m/s`);
+      else if (data.beaufort) windParts.push(`${data.beaufort} 級`);
       document.getElementById("valWind").textContent = windParts.length ? windParts.join(" · ") : "—";
       document.getElementById("valUvi").textContent =
         data.uvi ? `${data.uvi}${data.uviLevel ? `（${data.uviLevel}）` : ""}` : "—";
@@ -1349,7 +1368,7 @@
       }
 
       const tag = data.resolution === "windy" ? "Windy GFS"
-        : data.resolution === "blend" ? "氣象署×Windy"
+        : mixed || data.resolution === "blend" ? "氣象署×Windy"
         : data.resolution === "cache" ? "當日紀錄"
         : "中央氣象署";
       advice.textContent = data.desc
@@ -1494,17 +1513,6 @@
       return new Date(n.getFullYear(), n.getMonth(), n.getDate() + currentDayOffset, currentHour, 0, 0).getTime();
     }
 
-    function setWindyMetrics(s) {
-      document.getElementById("windyPrecip").textContent = s?.precipMm == null ? "—" : `${s.precipMm.toFixed(1)} mm`;
-      document.getElementById("windyTemp").textContent = s?.tempC == null ? "—" : `${s.tempC.toFixed(1)}°C`;
-      document.getElementById("windyWind").textContent = s?.windMs == null ? "—" : `${s.windMs.toFixed(1)} m/s`;
-      document.getElementById("windyPres").textContent = s?.pressureHpa == null ? "—" : `${s.pressureHpa.toFixed(0)} hPa`;
-      document.getElementById("windyRh").textContent = s?.rh == null ? "—" : `${s.rh.toFixed(0)}%`;
-      document.getElementById("windyAt").textContent = s?.at
-        ? new Date(s.at).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
-        : "—";
-    }
-
     function renderWebcam(cam, err) {
       const box = document.getElementById("webcamFrame");
       box.replaceChildren();
@@ -1549,13 +1557,8 @@
       const { lon, lat } = windyFocus();
       syncWindyMap(lat, lon);
       try {
-        const json = await WINDY.loadPoint(lat, lon);
-        const snap = WINDY.snapshotAt(json, forecastTargetMs());
-        setWindyMetrics(snap);
-      } catch (err) {
-        setWindyMetrics(null);
-        document.getElementById("windyPrecip").textContent = "載入失敗";
-      }
+        await WINDY.loadPoint(lat, lon);
+      } catch (_) { /* 面板改走氣象署；Windy 缺值就略過 */ }
       try {
         const cam = await WINDY.loadNearbyWebcam(lat, lon);
         renderWebcam(cam);
