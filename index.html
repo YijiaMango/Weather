@@ -2175,6 +2175,9 @@
     }
 
     window.addEventListener("resize", resizeCanvases);
+    if (window.ResizeObserver) {
+      new ResizeObserver(resizeCanvases).observe(document.getElementById("canvasWrapper"));
+    }
     resizeCanvases();
     syncTimeOverlay();
     drawMap();
