@@ -2,7 +2,7 @@
 
 台灣縣市／鄉鎮市區降雨檢視。以中央氣象署開放資料為主、Windy 公開資料為輔，於單一頁面呈現行政區選取、當日雷達、逐時預報與一週展望。
 
-**應用：** https://yijiamango.github.io/Weather/
+**應用：** https://yijiamango.github.io/MyWeather/
 
 ## 技術重點
 
