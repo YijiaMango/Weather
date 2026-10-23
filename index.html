@@ -24,6 +24,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="./weather-data/tw-topo.js"></script>
+  <script src="./weather-data/freeway-cctv.js"></script>
   <script src="./cwa.js"></script>
   <script src="./windy.js"></script>
   <style>
@@ -368,11 +369,14 @@
     }
     .webcam-frame img {
       width: 100%;
+      min-height: 140px;
+      max-height: 240px;
       height: auto;
       object-fit: contain;
       object-position: center;
       display: block;
       border: 0;
+      background: #080d1a;
     }
     .webcam-frame iframe {
       width: 100%;
@@ -584,7 +588,7 @@
       </div>
       <dl>
         <dt>資料來源</dt>
-        <dd>中央氣象署開放資料：縣市 36 小時預報、鄉鎮三日及一週預報、自動雨量站觀測；官網雷達回波 <code>CV1_TW_1000</code>（限當日）。Windy Point Forecast（GFS）、公開地圖嵌入及網路攝影機。</dd>
+        <dd>中央氣象署開放資料：縣市 36 小時預報、鄉鎮三日及一週預報、自動雨量站觀測；官網雷達回波 <code>CV1_TW_1000</code>（限當日）。國道高公局 CCTV（MJPEG 即時影像）。Windy Point Forecast（GFS）、公開地圖嵌入；附近無國道攝影機時改顯示 Windy 公開快照。</dd>
         <dt>圖表</dt>
         <dd>氣溫、相對濕度與風速若雙方均有數值，採算術平均。降雨機率以中央氣象署為準；官方無該時段資料時，優先改以 Windy GFS 推估，其次依天氣現象估列。圖上半透明直柱為推估值。綠線為氣溫。測站雨量為實測，不與模式資料混合。</dd>
         <dt>地圖</dt>
@@ -1621,13 +1625,74 @@
       return new Date(n.getFullYear(), n.getMonth(), n.getDate() + currentDayOffset, currentHour, 0, 0).getTime();
     }
 
+    function setWebcamCap(box, text) {
+      let cap = box.querySelector(".webcam-cap");
+      if (!cap) {
+        cap = document.createElement("div");
+        cap.className = "webcam-cap";
+        box.appendChild(cap);
+      }
+      cap.textContent = text;
+    }
+
+    const FREEWAY_FPS = 5;
+    let freewayPollTimer = 0;
+    let freewayFailStreak = 0;
+
+    function stopFreewayCamPoll() {
+      clearInterval(freewayPollTimer);
+      freewayPollTimer = 0;
+      freewayFailStreak = 0;
+    }
+
+    function freewayFrameUrl(base) {
+      return base + (base.includes("?") ? "&" : "?") + "t=" + Date.now();
+    }
+
+    /** 國道高公局：5 FPS 抽幀（換 src 取首幀；跨域無法用 fetch 拆 MJPEG） */
+    function renderFreewayCam(cam) {
+      const box = document.getElementById("webcamFrame");
+      const existing = box.querySelector("img.freeway-mjpg");
+      const label = `${cam.road || "國道"} ${cam.mile || ""}`.trim();
+      const capText = `${label} · 約 ${cam.km} km · 高公局 ${FREEWAY_FPS} FPS`;
+      if (existing && existing.dataset.url === cam.url && freewayPollTimer) {
+        setWebcamCap(box, capText);
+        return;
+      }
+      stopFreewayCamPoll();
+      box.replaceChildren();
+      const im = document.createElement("img");
+      im.className = "freeway-mjpg";
+      im.dataset.url = cam.url;
+      im.alt = label || "國道即時影像";
+      im.referrerPolicy = "no-referrer";
+      im.decoding = "async";
+      const bump = () => {
+        im.src = freewayFrameUrl(cam.url);
+      };
+      im.onload = () => { freewayFailStreak = 0; };
+      im.onerror = () => {
+        freewayFailStreak += 1;
+        if (freewayFailStreak < 8) return;
+        stopFreewayCamPoll();
+        im.onerror = null;
+        renderWebcam(null, "國道影像暫時無法連線，改試 Windy…");
+        loadWindyWebcamFallback();
+      };
+      box.appendChild(im);
+      setWebcamCap(box, capText);
+      bump();
+      freewayPollTimer = setInterval(bump, 1000 / FREEWAY_FPS);
+    }
+
     function renderWebcam(cam, err) {
+      stopFreewayCamPoll();
       const box = document.getElementById("webcamFrame");
       box.replaceChildren();
       const cap = document.createElement("div");
       cap.className = "webcam-cap";
       if (err || !cam) {
-        cap.textContent = "道路攝影機畫面讀取中...";
+        cap.textContent = err || "道路攝影機畫面讀取中...";
         box.appendChild(cap);
         return;
       }
@@ -1642,13 +1707,35 @@
         box.appendChild(ifr);
       } else if (img) {
         const im = document.createElement("img");
-        im.src = img;
+        im.src = img + (img.includes("?") ? "&" : "?") + "t=" + Date.now();
         im.alt = cam.title || "webcam";
         box.appendChild(im);
       }
       const loc = cam.location ? [cam.location.city, cam.location.region].filter(Boolean).join(" ") : "";
       cap.textContent = `${cam.title || "攝影機"}${loc ? " · " + loc : ""} · Windy 公開快照`;
       box.appendChild(cap);
+    }
+
+    async function loadWindyWebcamFallback() {
+      if (!window.WINDY) return;
+      const { lon, lat } = windyFocus();
+      try {
+        const cam = await WINDY.loadNearbyWebcam(lat, lon);
+        renderWebcam(cam);
+      } catch (err) {
+        renderWebcam(null, String(err.message || err));
+      }
+    }
+
+    function refreshRoadCam() {
+      const { lon, lat } = windyFocus();
+      const near = window.FREEWAY?.nearest?.(lon, lat, 45);
+      if (near?.url) {
+        renderFreewayCam(near);
+        return;
+      }
+      stopFreewayCamPoll();
+      loadWindyWebcamFallback();
     }
 
     function syncWindyMap(lat, lon) {
@@ -1659,18 +1746,14 @@
     }
 
     async function refreshWindy() {
-      if (!window.WINDY) return;
       const { lon, lat } = windyFocus();
-      syncWindyMap(lat, lon);
-      try {
-        await WINDY.loadPoint(lat, lon);
-      } catch (_) { /* 面板改走氣象署；Windy 缺值就略過 */ }
-      try {
-        const cam = await WINDY.loadNearbyWebcam(lat, lon);
-        renderWebcam(cam);
-      } catch (err) {
-        renderWebcam(null, String(err.message || err));
+      if (window.WINDY) {
+        syncWindyMap(lat, lon);
+        try {
+          await WINDY.loadPoint(lat, lon);
+        } catch (_) { /* 面板改走氣象署；Windy 缺值就略過 */ }
       }
+      refreshRoadCam();
       if (selectedCounty || selectedTown) {
         filledHourlySeries(0);
         renderWeekStrip();

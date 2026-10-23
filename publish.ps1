@@ -11,6 +11,9 @@ Set-Location -LiteralPath $repo
 if (-not (Test-Path -LiteralPath (Join-Path $repo "weather-data\tw-topo.js"))) {
   throw "Missing weather-data/tw-topo.js"
 }
+if (-not (Test-Path -LiteralPath (Join-Path $repo "weather-data\freeway-cctv.js"))) {
+  throw "Missing weather-data/freeway-cctv.js"
+}
 if (-not (Test-Path -LiteralPath (Join-Path $repo "og.png"))) {
   Write-Warning "og.png missing — LINE preview image may be empty"
 }

@@ -23,7 +23,8 @@
 | `O-A0002-001` | 自動雨量站即時觀測（10 分／1／3／24 小時） |
 | Windy Point Forecast（GFS） | 選點模式雨量、氣溫、風、氣壓 |
 | Windy 公開 embed | 模式地圖 |
-| Windy Webcams | 附近公開攝影機 |
+| 國道高公局 CCTV（MJPEG） | 最近國道即時影像（`weather-data/freeway-cctv.js`） |
+| Windy Webcams | 附近無國道機時的公開快照備援 |
 
 ## 架構
 
